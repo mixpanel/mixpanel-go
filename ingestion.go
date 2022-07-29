@@ -12,7 +12,8 @@ import (
 const (
 	trackEventLimit = 50
 
-	trackURL = "/track?verbose=1"
+	trackURL       = "/track?verbose=1"
+	apiErrorStatus = 0
 )
 
 var (
@@ -54,7 +55,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 		return fmt.Errorf("failed to json decode response body: %w", err)
 	}
 
-	if r.Status == 0 {
+	if r.Status == apiErrorStatus {
 		return r
 	}
 
