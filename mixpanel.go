@@ -16,11 +16,9 @@ const (
 
 	EmptyDistinctID = ""
 
-	propertyName       = "name"
 	propertyToken      = "token"
 	propertyDistinctID = "distinct_id"
 	propertyTime       = "time"
-	propertyIP         = "ip"
 	propertyMpLib      = "mp_lib"
 	goLib              = "go"
 	propertyLibVersion = "$lib_version"
