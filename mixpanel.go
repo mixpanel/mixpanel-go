@@ -2,8 +2,6 @@ package mixpanel
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 )
@@ -31,36 +29,8 @@ const (
 
 // Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
 type Event struct {
-	Name       string
-	DistinctID string
-	Token      string
-	Properties map[string]any
-}
-
-type eventPost struct {
 	Name       string         `json:"name"`
 	Properties map[string]any `json:"properties"`
-}
-
-func (e *Event) MarshalJSON() ([]byte, error) {
-	post := eventPost{
-		Name:       e.Name,
-		Properties: map[string]any{},
-	}
-
-	for k, v := range e.Properties {
-		post.Properties[k] = v
-	}
-	post.Properties[propertyToken] = e.Token
-	post.Properties[propertyDistinctID] = e.DistinctID
-	post.Properties[propertyMpLib] = goLib
-	post.Properties[propertyLibVersion] = version
-
-	data, err := json.Marshal(post)
-	if err != nil {
-		return nil, fmt.Errorf("failed to masrshal event: %w", err)
-	}
-	return data, nil
 }
 
 type ApiError struct {
@@ -120,12 +90,17 @@ func NewClient(token string, options ...Options) *Mixpanel {
 
 // NewEvent create a new mixpanel event to track
 func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[string]any) *Event {
-	return &Event{
+	e := &Event{
 		Name:       name,
-		DistinctID: distinctID,
-		Token:      m.token,
 		Properties: properties,
 	}
+
+	e.Properties[propertyToken] = m.token
+	e.Properties[propertyDistinctID] = distinctID
+	e.Properties[propertyMpLib] = goLib
+	e.Properties[propertyLibVersion] = version
+
+	return e
 }
 
 func (e *Event) AddTime(t time.Time) {

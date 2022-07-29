@@ -24,7 +24,7 @@ func TestTrack(t *testing.T) {
 		event := mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{})
 
 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []eventPost
+			var r []Event
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
 			require.Len(t, r, 1)
 			require.Equal(t, event.Name, r[0].Name)
@@ -55,7 +55,7 @@ func TestTrack(t *testing.T) {
 		event2 := mp.NewEvent("sample_event_3", EmptyDistinctID, map[string]any{})
 
 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []eventPost
+			var r []Event
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
 			require.Len(t, r, 3)
 
