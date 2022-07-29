@@ -21,13 +21,15 @@ func TestTrack(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		mp := NewClient("token")
-		event := mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{})
+		events := []*Event{
+			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
+		}
 
 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []Event
+			var r []*Event
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
 			require.Len(t, r, 1)
-			require.Equal(t, event.Name, r[0].Name)
+			require.ElementsMatch(t, events, r)
 
 			body := `
 			{
@@ -41,7 +43,7 @@ func TestTrack(t *testing.T) {
 			}, nil
 		})
 
-		require.NoError(t, mp.Track(ctx, []*Event{event}))
+		require.NoError(t, mp.Track(ctx, events))
 	})
 	t.Run("tack multiple event", func(t *testing.T) {
 		ctx := context.Background()
@@ -50,18 +52,18 @@ func TestTrack(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		mp := NewClient("token")
-		event0 := mp.NewEvent("sample_event_1", EmptyDistinctID, map[string]any{})
-		event1 := mp.NewEvent("sample_event_2", EmptyDistinctID, map[string]any{})
-		event2 := mp.NewEvent("sample_event_3", EmptyDistinctID, map[string]any{})
+		events := []*Event{
+			mp.NewEvent("sample_event_1", EmptyDistinctID, map[string]any{}),
+			mp.NewEvent("sample_event_2", EmptyDistinctID, map[string]any{}),
+			mp.NewEvent("sample_event_3", EmptyDistinctID, map[string]any{}),
+		}
 
 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []Event
+			var r []*Event
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
 			require.Len(t, r, 3)
 
-			require.Equal(t, event0.Name, r[0].Name)
-			require.Equal(t, event1.Name, r[1].Name)
-			require.Equal(t, event2.Name, r[2].Name)
+			require.ElementsMatch(t, events, r)
 
 			body := `
 			{
@@ -75,7 +77,7 @@ func TestTrack(t *testing.T) {
 			}, nil
 		})
 
-		require.NoError(t, mp.Track(ctx, []*Event{event0, event1, event2}))
+		require.NoError(t, mp.Track(ctx, events))
 	})
 
 	t.Run("test len", func(t *testing.T) {
