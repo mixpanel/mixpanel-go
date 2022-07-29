@@ -88,7 +88,7 @@ func NewClient(token string, options ...Options) *Mixpanel {
 	return mp
 }
 
-// NewEvent create a new mixpanel event to track
+// NewEvent creates a new mixpanel event to track
 func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[string]any) *Event {
 	e := &Event{
 		Name:       name,

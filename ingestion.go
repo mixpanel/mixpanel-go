@@ -31,7 +31,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 
 	body, err := json.Marshal(events)
 	if err != nil {
-		return fmt.Errorf("failed create http body: %w", err)
+		return fmt.Errorf("failed to create http body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseEndpoint+trackURL, bytes.NewReader(body))
@@ -43,7 +43,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 
 	httpResponse, err := m.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to post /tack request: %w", err)
+		return fmt.Errorf("failed to post /track request: %w", err)
 	}
 	defer httpResponse.Body.Close()
 
