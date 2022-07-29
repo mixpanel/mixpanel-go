@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/gohobby/deepcopy"
 )
 
 const (
@@ -123,14 +125,16 @@ func NewClient(token string, options ...Options) *Mixpanel {
 // NewEvent creates a new mixpanel event to track
 func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[string]any) *Event {
 	e := &Event{
-		Name:       name,
-		Properties: properties,
+		Name: name,
 	}
 
-	e.Properties[propertyToken] = m.token
-	e.Properties[propertyDistinctID] = distinctID
-	e.Properties[propertyMpLib] = goLib
-	e.Properties[propertyLibVersion] = version
+	copyMap := deepcopy.Map(properties).DeepCopy().(map[string]any)
+
+	copyMap[propertyToken] = m.token
+	copyMap[propertyDistinctID] = distinctID
+	copyMap[propertyMpLib] = goLib
+	copyMap[propertyLibVersion] = version
+	e.Properties = copyMap
 
 	return e
 }
