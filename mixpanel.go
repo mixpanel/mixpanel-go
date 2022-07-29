@@ -63,7 +63,7 @@ var (
 
 // Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
 type Event struct {
-	Name       string         `json:"name"`
+	Name       string         `json:"event"`
 	Properties map[string]any `json:"properties"`
 }
 

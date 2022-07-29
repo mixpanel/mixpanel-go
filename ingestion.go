@@ -33,6 +33,8 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 		return fmt.Errorf("failed to create http body: %w", err)
 	}
 
+	fmt.Println(string(body))
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseEndpoint+trackURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
