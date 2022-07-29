@@ -2,6 +2,7 @@ package mixpanel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -29,9 +30,32 @@ const (
 )
 
 var (
+	ErrInvalidDistinctID = errors.New("invalid distinct_id")
+	ErrReservedProperty  = errors.New("reserved property is set")
+
 	reservedProperties = map[string]struct{}{
 		propertyMpLib:      {},
 		propertyLibVersion: {},
+	}
+
+	invalidDistinctID = map[string]struct{}{
+		"00000000-0000-0000-0000-000000000000": {},
+		"anon":                                 {},
+		"anonymous":                            {},
+		"nil":                                  {},
+		"none":                                 {},
+		"null":                                 {},
+		"n/a":                                  {},
+		"na":                                   {},
+		"undefined":                            {},
+		"unknown":                              {},
+		"<nil>":                                {},
+		"0":                                    {},
+		"-1":                                   {},
+		"true":                                 {},
+		"false":                                {},
+		"[]":                                   {},
+		"{}":                                   {},
 	}
 )
 
@@ -111,12 +135,34 @@ func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[strin
 	return e
 }
 
+type EventCheckError struct {
+	Err         error
+	Description string
+}
+
+func (e EventCheckError) Error() string {
+	return e.Err.Error()
+}
+
 func (m *Mixpanel) NewEventWithChecks(name string, distinctID string, properties map[string]any) (*Event, error) {
 	for k := range properties {
 		if _, ok := reservedProperties[k]; ok {
-			return nil, fmt.Errorf("properties contains a reserved property: (%s)", k)
+			return nil, EventCheckError{
+				Err:         ErrReservedProperty,
+				Description: fmt.Sprintf("property %s is reserved", k),
+			}
 		}
 	}
+
+	for k := range invalidDistinctID {
+		if k == distinctID {
+			return nil, EventCheckError{
+				Err:         ErrInvalidDistinctID,
+				Description: fmt.Sprintf("distinct_id %s is not a valid", k),
+			}
+		}
+	}
+
 	return m.NewEvent(name, distinctID, properties), nil
 }
 
