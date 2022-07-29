@@ -2,6 +2,7 @@ package mixpanel
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -25,6 +26,13 @@ const (
 	acceptHeaderValue = "text/plain"
 	contentType       = "Content-Type"
 	contentTypeJson   = "application/json"
+)
+
+var (
+	reservedProperties = map[string]struct{}{
+		propertyMpLib:      {},
+		propertyLibVersion: {},
+	}
 )
 
 // Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
@@ -101,6 +109,15 @@ func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[strin
 	e.Properties[propertyLibVersion] = version
 
 	return e
+}
+
+func (m *Mixpanel) NewEventWithChecks(name string, distinctID string, properties map[string]any) (*Event, error) {
+	for k := range properties {
+		if _, ok := reservedProperties[k]; ok {
+			return nil, fmt.Errorf("properties contains a reserved property: (%s)", k)
+		}
+	}
+	return m.NewEvent(name, distinctID, properties), nil
 }
 
 func (e *Event) AddTime(t time.Time) {
