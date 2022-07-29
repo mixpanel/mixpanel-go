@@ -25,16 +25,18 @@ const (
 	goLib              = "go"
 	propertyLibVersion = "$lib_version"
 
-	contentType     = "Content-Type"
-	contentTypeJson = "application/json"
+	acceptHeader      = "Accept"
+	acceptHeaderValue = "text/plain"
+	contentType       = "Content-Type"
+	contentTypeJson   = "application/json"
 )
 
 // Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
 type Event struct {
-	Name       string         `json:"event"`
-	DistinctID string         `json:"-"`
-	Token      string         `json:"-"`
-	Properties map[string]any `json:"properties"`
+	Name       string
+	DistinctID string `json:"-"`
+	Token      string `json:"-"`
+	Properties map[string]any
 }
 
 type eventPost struct {
