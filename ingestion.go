@@ -11,9 +11,7 @@ import (
 
 const (
 	trackEventLimit = 50
-)
 
-const (
 	trackURL = "/track?verbose=1"
 )
 
