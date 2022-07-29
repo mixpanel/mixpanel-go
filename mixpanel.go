@@ -34,8 +34,8 @@ const (
 // Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
 type Event struct {
 	Name       string
-	DistinctID string `json:"-"`
-	Token      string `json:"-"`
+	DistinctID string
+	Token      string
 	Properties map[string]any
 }
 
