@@ -3,12 +3,25 @@ package mixpanel
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 )
 
-func (m *Mixpanel) executeBasicRequest(req *http.Request, useServiceAccount bool) error {
+func (m *Mixpanel) executeBasicRequest(ctx context.Context, dataBody any, url string, useServiceAccount bool) error {
+	body, err := json.Marshal(dataBody)
+	if err != nil {
+		return fmt.Errorf("failed to create http body: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Add(acceptHeader, acceptPlainTextHeader)
+	req.Header.Add(contentType, contentTypeJson)
+
 	if m.serviceAccount != nil {
 		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
 	} else {

@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	trackURL       = "/track?verbose=1"
-	peopleSetURL   = "/engage#profile-set?verbose=1"
-	importURL      = "/import"
-	apiErrorStatus = 0
+	trackURL         = "/track?verbose=1"
+	importURL        = "/import"
+	peopleSetURL     = "/engage#profile-set?verbose=1"
+	peopleSetOnceURL = "/engage#profile-set-once?verbose=1"
+	apiErrorStatus   = 0
 )
 
 var (
@@ -34,19 +35,7 @@ func (a GenericError) Error() string {
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
 func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
-	body, err := json.Marshal(events)
-	if err != nil {
-		return fmt.Errorf("failed to create http body: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseEndpoint+trackURL, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Add(acceptHeader, acceptPlainTextHeader)
-	req.Header.Add(contentType, contentTypeJson)
-
-	return m.executeBasicRequest(req, false)
+	return m.executeBasicRequest(ctx, events, m.baseEndpoint+trackURL, false)
 }
 
 type ImportGenericError struct {
@@ -173,18 +162,21 @@ func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties 
 		DistinctID: distinctID,
 		Set:        properties,
 	}
+	return m.executeBasicRequest(ctx, payload, m.baseEndpoint+peopleSetURL, false)
+}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to create http body: %w", err)
+type peopleSetOncePayload struct {
+	Token      string         `json:"$token"`
+	DistinctID string         `json:"$distinct_id"`
+	SetOnce    map[string]any `json:"$set_once"`
+}
+
+func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
+	payload := peopleSetOncePayload{
+		Token:      m.token,
+		DistinctID: distinctID,
+		SetOnce:    properties,
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseEndpoint+peopleSetURL, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Add(acceptHeader, acceptPlainTextHeader)
-	req.Header.Add(contentType, contentTypeJson)
-
-	return m.executeBasicRequest(req, false)
+	return m.executeBasicRequest(ctx, payload, m.baseEndpoint+peopleSetOnceURL, false)
 }
