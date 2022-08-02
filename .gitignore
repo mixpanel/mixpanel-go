@@ -16,3 +16,6 @@
 
 # vscode
 .vscode/settings.json
+
+# itests
+itests_test.go

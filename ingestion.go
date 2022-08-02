@@ -11,31 +11,29 @@ import (
 )
 
 const (
-	trackURL         = "/track?verbose=1"
-	importURL        = "/import"
-	peopleSetURL     = "/engage#profile-set?verbose=1"
-	peopleSetOnceURL = "/engage#profile-set-once?verbose=1"
-	apiErrorStatus   = 0
+	trackURL           = "/track?verbose=1"
+	importURL          = "/import"
+	peopleSetURL       = "/engage#profile-set?verbose=1"
+	peopleSetOnceURL   = "/engage#profile-set-once?verbose=1"
+	peopleIncrementUrl = "/engage#profile-numerical-add?verbose=1"
+	apiErrorStatus     = 0
 )
 
 var (
 	ErrTrackToManyEvents = errors.New("track only supports #50 events")
 )
 
-type GenericError struct {
-	ApiError string `json:"error"`
-	Status   int    `json:"status"`
-}
-
-func (a GenericError) Error() string {
-	return a.ApiError
-}
-
 // Track calls the Track endpoint
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
 func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
-	return m.executeBasicRequest(ctx, events, m.baseEndpoint+trackURL, false)
+	response, err := m.doBasicRequest(ctx, events, m.baseEndpoint+trackURL, false)
+	if err != nil {
+		return fmt.Errorf("failed to call track event: %w", err)
+	}
+	defer response.Body.Close()
+
+	return returnVerboseError(response)
 }
 
 type ImportGenericError struct {
@@ -157,12 +155,14 @@ type peopleSetPayload struct {
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
 func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error {
-	payload := peopleSetPayload{
-		Token:      m.token,
-		DistinctID: distinctID,
-		Set:        properties,
+	payload := []peopleSetPayload{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			Set:        properties,
+		},
 	}
-	return m.executeBasicRequest(ctx, payload, m.baseEndpoint+peopleSetURL, false)
+	return m.doPeopleRequest(ctx, payload, peopleSetURL)
 }
 
 type peopleSetOncePayload struct {
@@ -172,11 +172,29 @@ type peopleSetOncePayload struct {
 }
 
 func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
-	payload := peopleSetOncePayload{
-		Token:      m.token,
-		DistinctID: distinctID,
-		SetOnce:    properties,
+	payload := []peopleSetOncePayload{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			SetOnce:    properties,
+		},
 	}
+	return m.doPeopleRequest(ctx, payload, peopleSetOnceURL)
+}
 
-	return m.executeBasicRequest(ctx, payload, m.baseEndpoint+peopleSetOnceURL, false)
+type peopleNumericalProperty struct {
+	Token      string         `json:"$token"`
+	DistinctID string         `json:"$distinct_id"`
+	Add        map[string]int `json:"$add"`
+}
+
+func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
+	payload := []peopleNumericalProperty{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			Add:        add,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
 }

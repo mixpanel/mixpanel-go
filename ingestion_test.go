@@ -104,7 +104,7 @@ func TestTrack(t *testing.T) {
 		})
 
 		err := mp.Track(ctx, []*Event{mp.NewEvent("test-event", EmptyDistinctID, map[string]any{})})
-		var g GenericError
+		var g VerboseError
 		require.ErrorAs(t, err, &g)
 	})
 }
@@ -266,67 +266,4 @@ func TestImport(t *testing.T) {
 		}))
 	})
 
-}
-
-func TestPeopleSet(t *testing.T) {
-	t.Run("Set Properties", func(t *testing.T) {
-		ctx := context.Background()
-
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		mp := NewClient(0, "token", "api-secret")
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
-			var p peopleSetPayload
-			err := json.NewDecoder(req.Body).Decode(&p)
-			require.NoError(t, err)
-
-			require.Equal(t, "distinctID", p.DistinctID)
-			require.Equal(t, "token", p.Token)
-			require.Equal(t, "value-1", p.Set["prop-1"])
-			require.Equal(t, "value-2", p.Set["prop-2"])
-
-			body := `
-			{
-			  "error": "",
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		require.NoError(t, mp.PeopleSet(ctx, "distinctID", map[string]any{
-			"prop-1": "value-1",
-			"prop-2": "value-2",
-		}))
-	})
-	t.Run("Error Occurred", func(t *testing.T) {
-		ctx := context.Background()
-
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		mp := NewClient(0, "token", "api-secret")
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
-			body := `
-			{
-			  "error": "",
-			  "status": 0
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		err := mp.PeopleSet(ctx, "distinctID", map[string]any{})
-		var g GenericError
-		require.ErrorAs(t, err, &g)
-	})
 }
