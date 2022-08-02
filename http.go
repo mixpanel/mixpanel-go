@@ -12,6 +12,8 @@ import (
 
 var (
 	ErrStatusCode = errors.New("unexpected status code")
+
+	apiErrorStatus = 0
 )
 
 type VerboseError struct {
@@ -36,7 +38,7 @@ func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http body: %w", err)
 	}
-	fmt.Println(string(body))
+	fmt.Printf("%s \n %s", url, string(body))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

@@ -11,12 +11,17 @@ import (
 )
 
 const (
-	trackURL           = "/track?verbose=1"
-	importURL          = "/import"
-	peopleSetURL       = "/engage#profile-set?verbose=1"
-	peopleSetOnceURL   = "/engage#profile-set-once?verbose=1"
-	peopleIncrementUrl = "/engage#profile-numerical-add?verbose=1"
-	apiErrorStatus     = 0
+	trackURL                = "/track?verbose=1"
+	importURL               = "/import"
+	peopleSetURL            = "/engage#profile-set"
+	peopleSetOnceURL        = "/engage#profile-set-once"
+	peopleIncrementUrl      = "/engage#profile-numerical-add"
+	peopleUnionToListUrl    = "/engage#profile-union"
+	peopleAppendToListUrl   = "/engage#profile-list-append"
+	peopleRemoveFromListUrl = "/engage#profile-list-remove"
+	peopleBatchUpdateUrl    = "/engage#profile-batch-update"
+	peopleDeletePropertyUrl = "/engage#profile-unset"
+	peopleDeleteProfileUrl  = "/engage#profile-delete"
 )
 
 var (
@@ -197,4 +202,97 @@ func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add m
 		},
 	}
 	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
+}
+
+type peopleAppendListProperty struct {
+	Token      string            `json:"$token"`
+	DistinctID string            `json:"$distinct_id"`
+	Append     map[string]string `json:"$append"`
+}
+
+func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]string) error {
+	payload := []peopleAppendListProperty{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			Append:     append,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
+}
+
+type peopleListRemove struct {
+	Token      string            `json:"$token"`
+	DistinctID string            `json:"$distinct_id"`
+	Remove     map[string]string `json:"$remove"`
+}
+
+func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]string) error {
+	payload := []peopleListRemove{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			Remove:     remove,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
+}
+
+type peopleDeleteProperty struct {
+	Token      string   `json:"$token"`
+	DistinctID string   `json:"$distinct_id"`
+	Unset      []string `json:"$unset"`
+}
+
+func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
+	payload := []peopleDeleteProperty{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			Unset:      unset,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
+}
+
+type PeopleBatchUpdate struct {
+	DistinctID string         `json:"distinct_id"`
+	Add        map[string]any `json:"$add"`
+}
+
+type peopleBatchPayload struct {
+	Token      string         `json:"$token"`
+	DistinctID string         `json:"$distinct_id"`
+	Add        map[string]any `json:"$add"`
+}
+
+func (m *Mixpanel) PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchUpdate) error {
+	var payload = make([]peopleBatchPayload, 0, len(updates))
+	for _, update := range updates {
+		payload = append(payload, peopleBatchPayload{
+			Token:      m.token,
+			DistinctID: update.DistinctID,
+			Add:        update.Add,
+		})
+	}
+	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl)
+}
+
+type peopleDeleteProfile struct {
+	Token       string `json:"$token"`
+	DistinctID  string `json:"$distinct_id"`
+	Delete      string `json:"$delete"`
+	IgnoreAlias string `json:"$ignore_alias"`
+}
+
+func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
+	payload := []peopleDeleteProfile{
+		{
+			Token:       m.token,
+			DistinctID:  distinctID,
+			Delete:      "null", // The $delete object value is ignored - the profile is determined by the $distinct_id from the request itself.
+			IgnoreAlias: strconv.FormatBool(ignoreAlias),
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
 }
