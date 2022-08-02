@@ -1,8 +1,6 @@
 package mixpanel
 
 import (
-	"context"
-	"errors"
 	"net/http"
 	"time"
 )
@@ -33,12 +31,8 @@ const (
 )
 
 var (
-	ErrInvalidDistinctID = errors.New("invalid distinct_id")
-	ErrReservedProperty  = errors.New("reserved property is set")
-
-	Recommend MpCompression = 0
-	None      MpCompression = 0
-	Gzip      MpCompression = 1
+	None MpCompression = 0
+	Gzip MpCompression = 1
 )
 
 type MpCompression int
@@ -50,15 +44,15 @@ type Event struct {
 }
 
 type Ingestion interface {
-	Track(ctx context.Context, events []*Event) error
-	Import(ctx context.Context, events []*Event, options ImportOptions) error
-
-	PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error
+	//Track(ctx context.Context, events []*Event) error
+	//Import(ctx context.Context, events []*Event, options ImportOptions) error
+	//
+	//PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error
 }
 
 var _ Ingestion = (*Mixpanel)(nil)
 
-type MixpanelServiceAccount struct {
+type ServiceAccount struct {
 	Username string
 	Secret   string
 }
@@ -71,7 +65,7 @@ type Mixpanel struct {
 	token     string
 	apiSecret string
 
-	serviceAccount *MixpanelServiceAccount
+	serviceAccount *ServiceAccount
 }
 
 type Options func(mixpanel *Mixpanel)
@@ -102,7 +96,7 @@ func ProxyLocation(proxy string) Options {
 // https://developer.mixpanel.com/reference/service-accounts-api
 func SetServiceAccount(username, secret string) Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.serviceAccount = &MixpanelServiceAccount{
+		mixpanel.serviceAccount = &ServiceAccount{
 			Username: username,
 			Secret:   secret,
 		}

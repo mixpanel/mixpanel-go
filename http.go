@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 )
 
@@ -33,7 +34,7 @@ func (p PeopleError) Error() string {
 	return "people update return code 0"
 }
 
-func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string, acceptJson bool, useServiceAccount bool) (*http.Response, error) {
+func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string, acceptJson bool, useServiceAccount bool, ip *net.IP) (*http.Response, error) {
 	body, err := json.Marshal(dataBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http body: %w", err)
@@ -49,6 +50,13 @@ func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string,
 	} else {
 		req.Header.Add(acceptHeader, acceptPlainTextHeader)
 	}
+
+	if ip != nil {
+		req.Header.Add("ip", ip.String())
+	} else {
+		req.Header.Add("ip", "false")
+	}
+
 	req.Header.Add(contentType, contentTypeJson)
 
 	if m.serviceAccount != nil {
@@ -65,8 +73,8 @@ func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string,
 	return httpResponse, nil
 }
 
-func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
-	response, err := m.doBasicRequest(ctx, body, m.baseEndpoint+u, false, false)
+func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, ip *net.IP) error {
+	response, err := m.doBasicRequest(ctx, body, m.baseEndpoint+u, false, false, ip)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
 	}

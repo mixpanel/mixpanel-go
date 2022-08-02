@@ -45,7 +45,7 @@ func TestTrack(t *testing.T) {
 			}, nil
 		})
 
-		require.NoError(t, mp.Track(ctx, events))
+		require.NoError(t, mp.Track(ctx, events, nil))
 	})
 	t.Run("track multiple event", func(t *testing.T) {
 		ctx := context.Background()
@@ -79,7 +79,7 @@ func TestTrack(t *testing.T) {
 			}, nil
 		})
 
-		require.NoError(t, mp.Track(ctx, events))
+		require.NoError(t, mp.Track(ctx, events, nil))
 	})
 
 	t.Run("Error Occurred", func(t *testing.T) {
@@ -103,7 +103,7 @@ func TestTrack(t *testing.T) {
 			}, nil
 		})
 
-		err := mp.Track(ctx, []*Event{mp.NewEvent("test-event", EmptyDistinctID, map[string]any{})})
+		err := mp.Track(ctx, []*Event{mp.NewEvent("test-event", EmptyDistinctID, map[string]any{})}, nil)
 		var g VerboseError
 		require.ErrorAs(t, err, &g)
 	})

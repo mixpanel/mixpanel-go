@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 )
@@ -40,8 +41,8 @@ const (
 // Track calls the Track endpoint
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
-func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
-	response, err := m.doBasicRequest(ctx, events, m.baseEndpoint+trackURL, false, false)
+func (m *Mixpanel) Track(ctx context.Context, events []*Event, ip *net.IP) error {
+	response, err := m.doBasicRequest(ctx, events, m.baseEndpoint+trackURL, false, false, ip)
 	if err != nil {
 		return fmt.Errorf("failed to call track event: %w", err)
 	}
@@ -57,6 +58,16 @@ type ImportGenericError struct {
 }
 
 func (e ImportGenericError) Error() string {
+	return e.ApiError
+}
+
+type LookupTableError struct {
+	Code     int         `json:"code"`
+	ApiError string      `json:"error"`
+	Status   interface{} `json:"status"`
+}
+
+func (e LookupTableError) Error() string {
 	return e.ApiError
 }
 
@@ -168,7 +179,7 @@ type peopleSetPayload struct {
 
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
-func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error {
+func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any, ip *net.IP) error {
 	payload := []peopleSetPayload{
 		{
 			Token:      m.token,
@@ -176,7 +187,7 @@ func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties 
 			Set:        properties,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleSetURL)
+	return m.doPeopleRequest(ctx, payload, peopleSetURL, ip)
 }
 
 type peopleSetOncePayload struct {
@@ -185,7 +196,7 @@ type peopleSetOncePayload struct {
 	SetOnce    map[string]any `json:"$set_once"`
 }
 
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
+func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, ip *net.IP) error {
 	payload := []peopleSetOncePayload{
 		{
 			Token:      m.token,
@@ -193,7 +204,7 @@ func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, propert
 			SetOnce:    properties,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleSetOnceURL)
+	return m.doPeopleRequest(ctx, payload, peopleSetOnceURL, ip)
 }
 
 type peopleNumericalProperty struct {
@@ -210,7 +221,7 @@ func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add m
 			Add:        add,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
+	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl, nil)
 }
 
 type peopleAppendListProperty struct {
@@ -227,7 +238,7 @@ func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID stri
 			Append:     append,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
+	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl, nil)
 }
 
 type peopleListRemove struct {
@@ -244,7 +255,7 @@ func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID stri
 			Remove:     remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
+	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl, nil)
 }
 
 type peopleDeleteProperty struct {
@@ -261,7 +272,7 @@ func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, 
 			Unset:      unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
+	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl, nil)
 }
 
 type PeopleBatchUpdate struct {
@@ -284,7 +295,7 @@ func (m *Mixpanel) PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchU
 			Add:        update.Add,
 		})
 	}
-	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl)
+	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl, nil)
 }
 
 type peopleDeleteProfile struct {
@@ -303,5 +314,134 @@ func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, i
 			IgnoreAlias: strconv.FormatBool(ignoreAlias),
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
+	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl, nil)
+}
+
+type groupUpdateProperty struct {
+	Token    string         `json:"token"`
+	GroupKey string         `json:"$group_key"`
+	GroupId  string         `json:"$group_id"`
+	Set      map[string]any `json:"$set"`
+}
+
+func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+	payload := []groupUpdateProperty{
+		{
+			Token:    m.token,
+			GroupKey: groupKey,
+			GroupId:  groupID,
+			Set:      set,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, groupSetUrl, nil)
+}
+
+type groupSetOnceProperty struct {
+	Token    string         `json:"token"`
+	GroupKey string         `json:"$group_key"`
+	GroupId  string         `json:"$group_id"`
+	SetOnce  map[string]any `json:"$set_once"`
+}
+
+func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+	payload := []groupSetOnceProperty{
+		{
+			Token:    m.token,
+			GroupKey: groupKey,
+			GroupId:  groupID,
+			SetOnce:  set,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, nil)
+}
+
+type groupDeleteProperty struct {
+	Token    string   `json:"token"`
+	GroupKey string   `json:"$group_key"`
+	GroupId  string   `json:"$group_id"`
+	Unset    []string `json:"$unset"`
+}
+
+func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
+	payload := []groupDeleteProperty{
+		{
+			Token:    m.token,
+			GroupKey: groupKey,
+			GroupId:  groupID,
+			Unset:    unset,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, nil)
+}
+
+type groupRemoveListProperty struct {
+}
+
+type groupDelete struct {
+	Token    string `json:"token"`
+	GroupKey string `json:"$group_key"`
+	GroupId  string `json:"$group_id"`
+	Delete   string `json:"$delete"`
+}
+
+func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) error {
+	payload := []groupDelete{
+		{
+			Token:    m.token,
+			GroupKey: groupKey,
+			GroupId:  groupID,
+			Delete:   "null",
+		},
+	}
+
+	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, nil)
+}
+
+type LookupTable struct {
+	Code    int                  `json:"code"`
+	Status  string               `json:"status"`
+	Results []LookupTableResults `json:"results"`
+}
+
+type LookupTableResults struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.baseEndpoint+lookupUrl+"?project_id="+strconv.Itoa(m.projectID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http request:%w", err)
+	}
+
+	req.Header.Add(acceptHeader, acceptJsonHeader)
+
+	if m.serviceAccount != nil {
+		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+	} else {
+		return nil, fmt.Errorf("need service account")
+	}
+
+	httpResponse, err := m.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call lookup table: %w", err)
+	}
+	defer httpResponse.Body.Close()
+
+	switch httpResponse.StatusCode {
+	case http.StatusOK:
+		var result LookupTable
+		if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
+			return nil, fmt.Errorf("failed to decode results: %w", err)
+		}
+		return &result, nil
+	case http.StatusUnauthorized:
+		var e LookupTableError
+		if err := json.NewDecoder(httpResponse.Body).Decode(&e); err != nil {
+			return nil, fmt.Errorf("failed to decode error response:%w", err)
+		}
+		return nil, e
+	default:
+		return nil, ErrStatusCode
+	}
 }
