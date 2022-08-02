@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -36,10 +35,6 @@ const (
 
 	// Lookup tables
 	lookupUrl = "/lookup-tables"
-)
-
-var (
-	ErrTrackToManyEvents = errors.New("track only supports #50 events")
 )
 
 // Track calls the Track endpoint
