@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	trackURL                = "/track?verbose=1"
-	importURL               = "/import"
+	trackURL  = "/track?verbose=1"
+	importURL = "/import"
+
+	// People urls
 	peopleSetURL            = "/engage#profile-set"
 	peopleSetOnceURL        = "/engage#profile-set-once"
 	peopleIncrementUrl      = "/engage#profile-numerical-add"
@@ -22,6 +24,18 @@ const (
 	peopleBatchUpdateUrl    = "/engage#profile-batch-update"
 	peopleDeletePropertyUrl = "/engage#profile-unset"
 	peopleDeleteProfileUrl  = "/engage#profile-delete"
+
+	// Group urls
+	groupSetUrl                     = "/groups#group-set"
+	groupsSetOnceUrl                = "/groups#group-set-once"
+	groupsDeletePropertyUrl         = "/groups#group-unset"
+	groupsRemoveFromListPropertyUrl = "/groups#group-remove-from-list"
+	groupsUnionListPropertyUrl      = "/groups#group-union"
+	groupsBatchGroupProfilesUrl     = "/groups#group-batch-update"
+	groupsDeleteGroupUrl            = "/groups#group-delete"
+
+	// Lookup tables
+	lookupUrl = "/lookup-tables"
 )
 
 var (
@@ -32,7 +46,7 @@ var (
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
 func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
-	response, err := m.doBasicRequest(ctx, events, m.baseEndpoint+trackURL, false)
+	response, err := m.doBasicRequest(ctx, events, m.baseEndpoint+trackURL, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to call track event: %w", err)
 	}
