@@ -22,4 +22,8 @@ func TestMixpanelOptions(t *testing.T) {
 		mp := NewClient(0, "", "", ProxyLocation("https://localhost:8080"))
 		require.Equal(t, "https://localhost:8080", mp.baseEndpoint)
 	})
+	t.Run("debug http", func(t *testing.T) {
+		mp := NewClient(0, "", "", DebugHttpCalls())
+		require.True(t, mp.debugHttp)
+	})
 }

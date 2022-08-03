@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	trackURL  = "/track?verbose=1"
+	trackURL  = "/track"
 	importURL = "/import"
 
 	// People urls
@@ -155,23 +155,48 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	}
 }
 
+// PeopleOptions
+type peopleOptions struct {
+	IP        string  `json:"$ip,omitempty"`
+	Latitude  float64 `json:"$lat,omitempty"`
+	Longitude float64 `json:"$longitude,omitempty"`
+}
+
+type PeopleOptions func(p *peopleOptions)
+
+func SetPeopleIP(ip net.IP) PeopleOptions {
+	return func(p *peopleOptions) {
+		p.IP = ip.String()
+	}
+}
+
+func SetPeopleLatLong(lat, long float64) PeopleOptions {
+	return func(p *peopleOptions) {
+		p.Latitude = lat
+		p.Longitude = long
+	}
+}
+
 type peopleSetPayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	Set        map[string]any `json:"$set"`
+	*peopleOptions
 }
 
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
-func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any, ip *net.IP) error {
-	payload := []peopleSetPayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			Set:        properties,
-		},
+func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
+	payload := peopleSetPayload{
+		Token:         m.token,
+		DistinctID:    distinctID,
+		peopleOptions: &peopleOptions{},
+		Set:           properties,
 	}
-	return m.doPeopleRequest(ctx, payload, peopleSetURL, ip)
+	for _, o := range options {
+		o(payload.peopleOptions)
+	}
+	return m.doPeopleRequest(ctx, []peopleSetPayload{payload}, peopleSetURL)
 }
 
 type peopleSetOncePayload struct {
@@ -180,7 +205,7 @@ type peopleSetOncePayload struct {
 	SetOnce    map[string]any `json:"$set_once"`
 }
 
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, ip *net.IP) error {
+func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
 	payload := []peopleSetOncePayload{
 		{
 			Token:      m.token,
@@ -188,7 +213,7 @@ func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, propert
 			SetOnce:    properties,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleSetOnceURL, ip)
+	return m.doPeopleRequest(ctx, payload, peopleSetOnceURL)
 }
 
 type peopleNumericalProperty struct {
@@ -205,7 +230,7 @@ func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add m
 			Add:        add,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl, nil)
+	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
 }
 
 type peopleAppendListProperty struct {
@@ -222,7 +247,7 @@ func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID stri
 			Append:     append,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl, nil)
+	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
 }
 
 type peopleListRemove struct {
@@ -239,7 +264,7 @@ func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID stri
 			Remove:     remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl, nil)
+	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
 }
 
 type peopleDeleteProperty struct {
@@ -256,7 +281,7 @@ func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, 
 			Unset:      unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl, nil)
+	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
 }
 
 type PeopleBatchUpdate struct {
@@ -279,7 +304,7 @@ func (m *Mixpanel) PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchU
 			Add:        update.Add,
 		})
 	}
-	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl, nil)
+	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl)
 }
 
 type peopleDeleteProfile struct {
@@ -298,7 +323,7 @@ func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, i
 			IgnoreAlias: strconv.FormatBool(ignoreAlias),
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl, nil)
+	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
 }
 
 type groupUpdateProperty struct {
@@ -317,7 +342,7 @@ func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set m
 			Set:      set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupSetUrl, nil)
+	return m.doPeopleRequest(ctx, payload, groupSetUrl)
 }
 
 type groupSetOnceProperty struct {
@@ -336,7 +361,7 @@ func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, s
 			SetOnce:  set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, nil)
+	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl)
 }
 
 type groupDeleteProperty struct {
@@ -355,7 +380,7 @@ func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID st
 			Unset:    unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, nil)
+	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl)
 }
 
 type groupRemoveListProperty struct {
@@ -378,7 +403,7 @@ func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) er
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, nil)
+	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl)
 }
 
 type LookupTable struct {

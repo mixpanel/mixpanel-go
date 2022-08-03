@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 )
@@ -102,7 +101,8 @@ func (m *Mixpanel) doRequest(
 	return httpResponse, nil
 }
 
-func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, ip *net.IP) error {
+func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
+
 	response, err := m.doRequest(ctx, body, m.baseEndpoint+u, false, false, None, nil)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
