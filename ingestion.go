@@ -125,7 +125,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 		http.MethodPost,
 		m.baseEndpoint+importURL,
 		events,
-		Gzip,
+		options.Compression,
 		addQueryParams(values), acceptJson(), m.useServiceAccount(),
 	)
 	if err != nil {
