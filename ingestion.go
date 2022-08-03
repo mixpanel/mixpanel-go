@@ -43,16 +43,16 @@ const (
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
 func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
+	query := url.Values{}
+	query.Add("verbose", "1")
+
 	response, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		events,
 		m.baseEndpoint+trackURL,
-		false,
-		false,
+		events,
 		None,
-		nil,
-		nil,
+		addQueryParams(query), acceptPlainText(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to track event: %w", err)
@@ -123,13 +123,10 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		events,
 		m.baseEndpoint+importURL,
-		true,
-		true,
-		options.Compression,
-		values,
-		nil,
+		events,
+		Gzip,
+		addQueryParams(values), acceptJson(), m.useServiceAccount(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import:%w", err)
@@ -499,13 +496,10 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodGet,
-		nil,
 		m.baseEndpoint+lookupTablesUrl,
-		true,
-		true,
-		None,
-		query,
 		nil,
+		None,
+		addQueryParams(query), acceptJson(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call list lookup tables: %v", err)

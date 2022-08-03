@@ -34,101 +34,114 @@ func (p PeopleError) Error() string {
 	return "people update return code 0"
 }
 
+type httpOptions func(req *http.Request)
+
+func gzipHeader() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(contentEncodingHeader, "gzip")
+	}
+}
+
+func (m *Mixpanel) useServiceAccount() httpOptions {
+	return func(req *http.Request) {
+		if m.serviceAccount != nil {
+			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+		} else {
+			req.SetBasicAuth(m.apiSecret, "")
+		}
+	}
+}
+
+func acceptJson() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(acceptHeader, acceptJsonHeader)
+	}
+}
+
+func addQueryParams(query url.Values) httpOptions {
+	return func(req *http.Request) {
+		rQuery := req.URL.Query()
+		for key, values := range query {
+			rQuery[key] = values
+		}
+		req.URL.RawQuery = rQuery.Encode()
+	}
+}
+
+func acceptPlainText() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(acceptHeader, acceptPlainTextHeader)
+	}
+}
+
+type debugHttpCall struct {
+	RawPayload string
+	Url        string
+	Query      url.Values
+	Headers    http.Header
+}
+
 func (m *Mixpanel) doRequest(
 	ctx context.Context,
 	method string,
-	dataBody any,
 	url string,
-	acceptJson, useServiceAccount bool,
-	compression MpCompression,
-	params url.Values,
-	headers http.Header,
+	body any,
+	compress MpCompression,
+	options ...httpOptions,
 ) (*http.Response, error) {
-	var payloadBody []byte
-	var uncompressedBody []byte
-	var contentHeader string
+	var debugHttpCall debugHttpCall
 
-	if dataBody != nil {
-		var err error
-		uncompressedBody, err = json.Marshal(dataBody)
+	var requestBody []byte
+	if body != nil {
+		jsonMarshal, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create http body: %w", err)
 		}
-		payloadBody = uncompressedBody
+		debugHttpCall.RawPayload = string(jsonMarshal)
+		requestBody = jsonMarshal
 
-		switch compression {
+		switch compress {
 		case Gzip:
-			payloadBody, err = gzipBody(uncompressedBody)
+			requestBody, err = gzipBody(jsonMarshal)
 			if err != nil {
-				return nil, fmt.Errorf("failed to compress: %w", err)
+				return nil, fmt.Errorf("failed to gzip body: %w", err)
 			}
-			contentHeader = "gzip"
+			options = append(options, gzipHeader())
 		}
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		method,
-		url,
-		bytes.NewReader(payloadBody),
-	)
+	request, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(requestBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 
-	if contentHeader != "" {
-		req.Header.Add(contentEncodingHeader, contentHeader)
+	for _, o := range options {
+		o(request)
 	}
 
-	if acceptJson {
-		req.Header.Set(acceptHeader, acceptJsonHeader)
-	} else {
-		req.Header.Set(acceptHeader, acceptPlainTextHeader)
-	}
-
-	if m.serviceAccount != nil {
-		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
-	} else {
-		req.SetBasicAuth(m.apiSecret, "")
-	}
-
-	query := req.URL.Query()
-	for k, v := range params {
-		query[k] = v
-	}
-	req.URL.RawQuery = query.Encode()
-
-	for k, v := range headers {
-		req.Header[k] = v
-	}
+	debugHttpCall.Url = request.URL.String()
+	debugHttpCall.Query = request.URL.Query()
+	debugHttpCall.Headers = request.Header
 
 	if m.debugHttp {
-		fmt.Printf("Url -> %s\nPayload -> %s \n", req.URL.String(), uncompressedBody)
-		fmt.Println("Headers")
-		for h, v := range req.Header {
-			fmt.Println(h, v)
+		debugPayload, err := json.MarshalIndent(debugHttpCall, "", "\t")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal debug_http payload %w", err)
 		}
+		fmt.Printf("Debug Payload:\n %s\n", string(debugPayload))
+
 	}
 
-	httpResponse, err := m.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to post request: %w", err)
-	}
-
-	return httpResponse, nil
+	return m.client.Do(request)
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
 	response, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		body,
 		m.baseEndpoint+u,
-		false,
-		false,
+		body,
 		None,
-		nil,
-		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
