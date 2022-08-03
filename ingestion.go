@@ -1,12 +1,12 @@
 package mixpanel
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -41,34 +41,22 @@ const (
 // Track calls the Track endpoint
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
-func (m *Mixpanel) Track(ctx context.Context, events []*Event, ip *net.IP) error {
-	response, err := m.doBasicRequest(ctx, events, m.baseEndpoint+trackURL, false, false, ip)
+func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
+	response, err := m.doRequest(
+		ctx,
+		events,
+		m.baseEndpoint+trackURL,
+		false,
+		false,
+		None,
+		nil,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to call track event: %w", err)
 	}
 	defer response.Body.Close()
 
 	return returnVerboseError(response)
-}
-
-type ImportGenericError struct {
-	Code     int         `json:"code"`
-	ApiError string      `json:"error"`
-	Status   interface{} `json:"status"`
-}
-
-func (e ImportGenericError) Error() string {
-	return e.ApiError
-}
-
-type LookupTableError struct {
-	Code     int         `json:"code"`
-	ApiError string      `json:"error"`
-	Status   interface{} `json:"status"`
-}
-
-func (e LookupTableError) Error() string {
-	return e.ApiError
 }
 
 type ImportFailedValidationError struct {
@@ -100,54 +88,35 @@ var ImportOptionsRecommend = ImportOptions{
 	Compression: Gzip,
 }
 
+type ImportGenericError struct {
+	Code     int         `json:"code"`
+	ApiError string      `json:"error"`
+	Status   interface{} `json:"status"`
+}
+
+func (e ImportGenericError) Error() string {
+	return e.ApiError
+}
+
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
 func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) error {
-	body, err := json.Marshal(events)
+
+	var values url.Values
+	values.Add("strict", strconv.FormatBool(options.Strict))
+	values.Add("project_id", strconv.Itoa(m.projectID))
+
+	httpResponse, err := m.doRequest(
+		ctx,
+		events,
+		importURL,
+		true,
+		true,
+		options.Compression,
+		values,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to create http body: %w", err)
-	}
-
-	var contentHeader string
-	switch options.Compression {
-	case Gzip:
-		body, err = gzipBody(body)
-		if err != nil {
-			return fmt.Errorf("failed to compress: %w", err)
-		}
-		contentHeader = "gzip"
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseEndpoint+importURL, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Add(acceptHeader, acceptJsonHeader)
-	req.Header.Add(contentType, contentTypeJson)
-
-	if contentHeader != "" {
-		req.Header.Add(contentEncodingHeader, contentHeader)
-	}
-
-	if m.serviceAccount != nil {
-		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
-	} else {
-		req.SetBasicAuth(m.apiSecret, "")
-	}
-
-	query := req.URL.Query()
-	query.Set("project_id", strconv.Itoa(m.projectID))
-	if options.Strict {
-		query.Add("strict", "1")
-	} else {
-		query.Add("strict", "0")
-	}
-
-	req.URL.RawQuery = query.Encode()
-
-	httpResponse, err := m.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to post /import request: %w", err)
+		return fmt.Errorf("failed to import:%w", err)
 	}
 	defer httpResponse.Body.Close()
 
@@ -406,6 +375,16 @@ type LookupTable struct {
 type LookupTableResults struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type LookupTableError struct {
+	Code     int         `json:"code"`
+	ApiError string      `json:"error"`
+	Status   interface{} `json:"status"`
+}
+
+func (e LookupTableError) Error() string {
+	return e.ApiError
 }
 
 func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {

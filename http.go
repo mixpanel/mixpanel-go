@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 )
 
 var (
@@ -34,27 +35,44 @@ func (p PeopleError) Error() string {
 	return "people update return code 0"
 }
 
-func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string, acceptJson bool, useServiceAccount bool, ip *net.IP) (*http.Response, error) {
+func (m *Mixpanel) doRequest(
+	ctx context.Context,
+	dataBody any,
+	url string,
+	acceptJson, useServiceAccount bool,
+	compression MpCompression,
+	params url.Values,
+) (*http.Response, error) {
 	body, err := json.Marshal(dataBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http body: %w", err)
 	}
-	fmt.Printf("%s \n %s", url, string(body))
+
+	var contentHeader string
+	switch compression {
+	case Gzip:
+		body, err = gzipBody(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compress: %w", err)
+		}
+		contentHeader = "gzip"
+	}
+
+	fmt.Printf("%s \n %s \n", url, string(body))
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if contentHeader != "" {
+		req.Header.Add(contentEncodingHeader, contentHeader)
 	}
 
 	if acceptJson {
 		req.Header.Add(acceptHeader, acceptJsonHeader)
 	} else {
 		req.Header.Add(acceptHeader, acceptPlainTextHeader)
-	}
-
-	if ip != nil {
-		req.Header.Add("ip", ip.String())
-	} else {
-		req.Header.Add("ip", "false")
 	}
 
 	req.Header.Add(contentType, contentTypeJson)
@@ -74,7 +92,7 @@ func (m *Mixpanel) doBasicRequest(ctx context.Context, dataBody any, url string,
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, ip *net.IP) error {
-	response, err := m.doBasicRequest(ctx, body, m.baseEndpoint+u, false, false, ip)
+	response, err := m.doRequest(ctx, body, m.baseEndpoint+u, false, false, None, nil)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
 	}
@@ -122,6 +140,5 @@ func gzipBody(data []byte) ([]byte, error) {
 	if err := gzip.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
 	}
-
 	return buf.Bytes(), nil
 }

@@ -1,6 +1,8 @@
 package mixpanel
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"time"
 )
@@ -16,6 +18,7 @@ const (
 	propertyToken      = "token"
 	propertyDistinctID = "distinct_id"
 
+	propertyIP         = "ip"
 	propertyInsertID   = "$insert_id"
 	propertyTime       = "time"
 	propertyMpLib      = "mp_lib"
@@ -30,22 +33,20 @@ const (
 	contentEncodingHeader = "Content-Encoding"
 )
 
+type MpCompression int
+
 var (
 	None MpCompression = 0
 	Gzip MpCompression = 1
 )
 
-type MpCompression int
-
-// Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
-type Event struct {
-	Name       string         `json:"event"`
-	Properties map[string]any `json:"properties"`
-}
-
 type Ingestion interface {
-	//Track(ctx context.Context, events []*Event) error
-	//Import(ctx context.Context, events []*Event, options ImportOptions) error
+	// Events
+	Track(ctx context.Context, events []*Event) error
+	Import(ctx context.Context, events []*Event, options ImportOptions) error
+
+	// People
+
 	//
 	//PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error
 }
@@ -70,6 +71,7 @@ type Mixpanel struct {
 
 type Options func(mixpanel *Mixpanel)
 
+// HttpClient will replace the http.DefaultClient with the provided http.Client
 func HttpClient(client *http.Client) Options {
 	return func(mixpanel *Mixpanel) {
 		mixpanel.client = client
@@ -120,6 +122,12 @@ func NewClient(projectID int, token, secret string, options ...Options) *Mixpane
 	return mp
 }
 
+// Event is a mixpanel event: https://help.mixpanel.com/hc/en-us/articles/360041995352-Mixpanel-Concepts-Events
+type Event struct {
+	Name       string         `json:"event"`
+	Properties map[string]any `json:"properties"`
+}
+
 // NewEvent creates a new mixpanel event to track
 func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[string]any) *Event {
 	e := &Event{
@@ -146,4 +154,11 @@ func (e *Event) AddTime(t time.Time) {
 // https://developer.mixpanel.com/reference/import-events#propertiesinsert_id
 func (e *Event) AddInsertID(insertID string) {
 	e.Properties[propertyInsertID] = insertID
+}
+
+// AddIP if you supply a property ip with an IP address
+// Mixpanel will automatically do a GeoIP lookup and replace the ip property with geographic properties (City, Country, Region). These properties can be used in our UI to segment events geographically.
+// https://developer.mixpanel.com/reference/import-events#geoip-enrichment
+func (e *Event) AddIP(ip *net.IP) {
+	e.Properties[propertyIP] = ip.String()
 }
