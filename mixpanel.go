@@ -48,6 +48,7 @@ type Ingestion interface {
 	// People
 	PeopleSet(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error
 	PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error
+	PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error
 
 	// Groups
 

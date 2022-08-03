@@ -206,6 +206,8 @@ type peopleSetOncePayload struct {
 	*peopleOptions
 }
 
+// PeopleSetOnce calls the User Set Property Once API
+// https://developer.mixpanel.com/reference/profile-set-property-once
 func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
 	payload := peopleSetOncePayload{
 		Token:         m.token,
@@ -219,14 +221,16 @@ func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, propert
 	return m.doPeopleRequest(ctx, []peopleSetOncePayload{payload}, peopleSetOnceURL)
 }
 
-type peopleNumericalProperty struct {
+type peopleNumericalAddPayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	Add        map[string]int `json:"$add"`
 }
 
+// PeopleIncrement calls the User Increment Numerical Property API
+// https://developer.mixpanel.com/reference/profile-numerical-add
 func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
-	payload := []peopleNumericalProperty{
+	payload := []peopleNumericalAddPayload{
 		{
 			Token:      m.token,
 			DistinctID: distinctID,
