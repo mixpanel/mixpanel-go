@@ -21,7 +21,7 @@ const (
 	peopleUnionToListUrl    = "/engage#profile-union"
 	peopleAppendToListUrl   = "/engage#profile-list-append"
 	peopleRemoveFromListUrl = "/engage#profile-list-remove"
-	// peopleBatchUpdateUrl    = "/engage#profile-batch-update"
+	// peopleBatchUpdateUrl    = "/engage#profile-batch-update" todo implement, won't in v0
 	peopleDeletePropertyUrl = "/engage#profile-unset"
 	peopleDeleteProfileUrl  = "/engage#profile-delete"
 
@@ -31,11 +31,12 @@ const (
 	groupsDeletePropertyUrl         = "/groups#group-unset"
 	groupsRemoveFromListPropertyUrl = "/groups#group-remove-from-list"
 	groupsUnionListPropertyUrl      = "/groups#group-union"
-	// groupsBatchGroupProfilesUrl     = "/groups#group-batch-update"
+	// groupsBatchGroupProfilesUrl     = "/groups#group-batch-update" todo implement, won't in v0
 	groupsDeleteGroupUrl = "/groups#group-delete"
 
 	// Lookup tables
 	lookupTablesUrl = "/lookup-tables"
+	//replaceLookupTableUrl = "/lookup-tables/" todo implement, won't in v0
 )
 
 // Track calls the Track endpoint
@@ -50,6 +51,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 		false,
 		false,
 		None,
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -127,6 +129,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 		true,
 		options.Compression,
 		values,
+		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import:%w", err)
@@ -502,6 +505,7 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 		true,
 		None,
 		query,
+		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call list lookup tables: %v", err)

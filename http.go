@@ -42,6 +42,7 @@ func (m *Mixpanel) doRequest(
 	acceptJson, useServiceAccount bool,
 	compression MpCompression,
 	params url.Values,
+	headers http.Header,
 ) (*http.Response, error) {
 	var payloadBody []byte
 	var uncompressedBody []byte
@@ -97,6 +98,10 @@ func (m *Mixpanel) doRequest(
 	}
 	req.URL.RawQuery = query.Encode()
 
+	for k, v := range headers {
+		req.Header[k] = v
+	}
+
 	if m.debugHttp {
 		fmt.Printf("Url -> %s\nPayload -> %s \n", req.URL.String(), uncompressedBody)
 		fmt.Println("Headers")
@@ -122,6 +127,7 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) erro
 		false,
 		false,
 		None,
+		nil,
 		nil,
 	)
 	if err != nil {
