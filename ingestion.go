@@ -259,14 +259,16 @@ func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID stri
 	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
 }
 
-type peopleListRemove struct {
+type peopleListRemovePayload struct {
 	Token      string            `json:"$token"`
 	DistinctID string            `json:"$distinct_id"`
 	Remove     map[string]string `json:"$remove"`
 }
 
+// PeopleRemoveListProperty calls the User Remove from List Property API
+// https://developer.mixpanel.com/reference/profile-remove-from-list-property
 func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]string) error {
-	payload := []peopleListRemove{
+	payload := []peopleListRemovePayload{
 		{
 			Token:      m.token,
 			DistinctID: distinctID,
@@ -276,14 +278,16 @@ func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID stri
 	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
 }
 
-type peopleDeleteProperty struct {
+type peopleDeletePropertyPayload struct {
 	Token      string   `json:"$token"`
 	DistinctID string   `json:"$distinct_id"`
 	Unset      []string `json:"$unset"`
 }
 
+// PeopleDeleteProperty calls the User Delete Property API
+// https://developer.mixpanel.com/reference/profile-delete-property
 func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
-	payload := []peopleDeleteProperty{
+	payload := []peopleDeletePropertyPayload{
 		{
 			Token:      m.token,
 			DistinctID: distinctID,

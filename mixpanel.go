@@ -51,6 +51,7 @@ type Ingestion interface {
 	PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error
 	// Union
 	PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]string) error
+	PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error
 
 	// Groups
 
@@ -58,6 +59,12 @@ type Ingestion interface {
 }
 
 var _ Ingestion = (*Mixpanel)(nil)
+
+// MpApi is all the API's in the Mixpanel docs
+// https://developer.mixpanel.com/reference/overview
+type MpApi interface {
+	Ingestion
+}
 
 type ServiceAccount struct {
 	Username string
