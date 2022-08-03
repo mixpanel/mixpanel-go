@@ -318,31 +318,6 @@ func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, 
 	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
 }
 
-type PeopleBatchUpdate struct {
-	DistinctID string         `json:"distinct_id"`
-	Add        map[string]any `json:"$add"`
-}
-
-type peopleBatchPayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	Add        map[string]any `json:"$add"`
-}
-
-// PeopleBatchUpdate calls the User Batch Update API
-// https://developer.mixpanel.com/reference/profile-batch-update
-func (m *Mixpanel) PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchUpdate) error {
-	var payload = make([]peopleBatchPayload, 0, len(updates))
-	for _, update := range updates {
-		payload = append(payload, peopleBatchPayload{
-			Token:      m.token,
-			DistinctID: update.DistinctID,
-			Add:        update.Add,
-		})
-	}
-	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl)
-}
-
 type peopleDeleteProfilePayload struct {
 	Token       string `json:"$token"`
 	DistinctID  string `json:"$distinct_id"`
@@ -364,15 +339,17 @@ func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, i
 	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
 }
 
-type groupUpdateProperty struct {
-	Token    string         `json:"token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Set      map[string]any `json:"$set"`
+type groupUpdatePropertyPayload struct {
+	Token    string            `json:"$token"`
+	GroupKey string            `json:"$group_key"`
+	GroupId  string            `json:"$group_id"`
+	Set      map[string]string `json:"$set"`
 }
 
-func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
-	payload := []groupUpdateProperty{
+// GroupUpdateProperty calls the Group Update Property API
+// https://developer.mixpanel.com/reference/group-set-property
+func (m *Mixpanel) GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]string) error {
+	payload := []groupUpdatePropertyPayload{
 		{
 			Token:    m.token,
 			GroupKey: groupKey,
@@ -383,15 +360,17 @@ func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set m
 	return m.doPeopleRequest(ctx, payload, groupSetUrl)
 }
 
-type groupSetOnceProperty struct {
-	Token    string         `json:"token"`
+type groupSetOncePropertyPayload struct {
+	Token    string         `json:"$token"`
 	GroupKey string         `json:"$group_key"`
 	GroupId  string         `json:"$group_id"`
 	SetOnce  map[string]any `json:"$set_once"`
 }
 
+// GroupSetOnce calls the Group Set Property Once API
+// https://developer.mixpanel.com/reference/group-set-property-once
 func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
-	payload := []groupSetOnceProperty{
+	payload := []groupSetOncePropertyPayload{
 		{
 			Token:    m.token,
 			GroupKey: groupKey,
@@ -402,15 +381,17 @@ func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, s
 	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl)
 }
 
-type groupDeleteProperty struct {
-	Token    string   `json:"token"`
+type groupDeletePropertyPayload struct {
+	Token    string   `json:"$token"`
 	GroupKey string   `json:"$group_key"`
 	GroupId  string   `json:"$group_id"`
 	Unset    []string `json:"$unset"`
 }
 
+// GroupDeleteProperty calls the group delete property API
+// https://developer.mixpanel.com/reference/group-delete-property
 func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
-	payload := []groupDeleteProperty{
+	payload := []groupDeletePropertyPayload{
 		{
 			Token:    m.token,
 			GroupKey: groupKey,
@@ -421,18 +402,59 @@ func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID st
 	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl)
 }
 
-type groupRemoveListProperty struct {
+type groupRemoveListPropertyPayload struct {
+	Token    string            `json:"$token"`
+	GroupKey string            `json:"$group_key"`
+	GroupId  string            `json:"$group_id"`
+	Remove   map[string]string `json:"$remove"`
 }
 
-type groupDelete struct {
-	Token    string `json:"token"`
+// GroupRemoveListProperty calls the Groups Remove from List Property API
+// https://developer.mixpanel.com/reference/group-remove-from-list-property
+func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]string) error {
+	payload := []groupRemoveListPropertyPayload{
+		{
+			Token:    m.token,
+			GroupKey: groupKey,
+			GroupId:  groupID,
+			Remove:   remove,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl)
+}
+
+type groupUnionListPropertyPayload struct {
+	Token    string         `json:"$token"`
+	GroupKey string         `json:"$group_key"`
+	GroupId  string         `json:"$group_id"`
+	Union    map[string]any `json:"$union"`
+}
+
+// GroupUnionListProperty calls the Groups Remove from Union Property API
+// https://developer.mixpanel.com/reference/group-union
+func (m *Mixpanel) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
+	payload := []groupUnionListPropertyPayload{
+		{
+			Token:    m.token,
+			GroupKey: groupKey,
+			GroupId:  groupID,
+			Union:    union,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl)
+}
+
+type groupDeletePayload struct {
+	Token    string `json:"$token"`
 	GroupKey string `json:"$group_key"`
 	GroupId  string `json:"$group_id"`
 	Delete   string `json:"$delete"`
 }
 
+// GroupDelete calls the Groups Delete API
+// https://developer.mixpanel.com/reference/delete-group
 func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) error {
-	payload := []groupDelete{
+	payload := []groupDeletePayload{
 		{
 			Token:    m.token,
 			GroupKey: groupKey,

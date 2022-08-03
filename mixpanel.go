@@ -53,10 +53,15 @@ type Ingestion interface {
 	PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]string) error
 	PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]string) error
 	PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error
-	PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchUpdate) error
 	PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error
 
 	// Groups
+	GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]string) error
+	GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error
+	GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error
+	GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]string) error
+	GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error
+	GroupDelete(ctx context.Context, groupKey, groupID string) error
 
 	// Lookup
 	ListLookupTables(ctx context.Context) (*LookupTable, error)
