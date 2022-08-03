@@ -48,8 +48,9 @@ type Ingestion interface {
 	// People
 	PeopleSet(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error
 
-	//
-	//PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error
+	// Groups
+
+	// Lookup
 }
 
 var _ Ingestion = (*Mixpanel)(nil)
