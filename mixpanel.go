@@ -73,10 +73,10 @@ type Ingestion interface {
 var _ Ingestion = (*Mixpanel)(nil)
 
 type Export interface {
-	Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string)
+	Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string) ([]*Event, error)
 }
 
-// var _ Export = (*Mixpanel)(nil)
+var _ Export = (*Mixpanel)(nil)
 
 // MpApi is all the API's in the Mixpanel docs
 // https://developer.mixpanel.com/reference/overview
