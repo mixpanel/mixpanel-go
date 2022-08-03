@@ -90,9 +90,9 @@ type ServiceAccount struct {
 }
 
 type Mixpanel struct {
-	client           *http.Client
-	baseEndpoint     string
-	dataBaseEndpoint string
+	client            *http.Client
+	ingestionEndpoint string
+	dataEndpoint      string
 
 	projectID int
 	token     string
@@ -116,17 +116,24 @@ func HttpClient(client *http.Client) Options {
 // Use for EU Projects
 func EuResidency() Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.baseEndpoint = euEndpoint
-		mixpanel.baseEndpoint = euDataEndpoint
+		mixpanel.ingestionEndpoint = euEndpoint
+		mixpanel.dataEndpoint = euDataEndpoint
 	}
 }
 
-// ProxyLocation sets the mixpanel client to use the custom base endpoint
+// ProxyApiLocation sets the mixpanel client to use the custom location for all ingestion requests
 // Example: http://locahosthost:8080
-func ProxyLocation(proxy string) Options {
+func ProxyApiLocation(proxy string) Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.baseEndpoint = proxy
-		mixpanel.dataBaseEndpoint = proxy
+		mixpanel.ingestionEndpoint = proxy
+	}
+}
+
+// ProxyDataLocation sets the mixpanel client to use the custom location for all data requests
+// Example: http://locahosthost:8080
+func ProxyDataLocation(proxy string) Options {
+	return func(mixpanel *Mixpanel) {
+		mixpanel.dataEndpoint = proxy
 	}
 }
 
@@ -151,12 +158,12 @@ func DebugHttpCalls() Options {
 // NewClient create a new mixpanel client
 func NewClient(projectID int, token, secret string, options ...Options) *Mixpanel {
 	mp := &Mixpanel{
-		projectID:        projectID,
-		client:           http.DefaultClient,
-		baseEndpoint:     usEndpoint,
-		dataBaseEndpoint: usDataEndpoint,
-		token:            token,
-		apiSecret:        secret,
+		projectID:         projectID,
+		client:            http.DefaultClient,
+		ingestionEndpoint: usEndpoint,
+		dataEndpoint:      usDataEndpoint,
+		token:             token,
+		apiSecret:         secret,
 	}
 
 	for _, o := range options {

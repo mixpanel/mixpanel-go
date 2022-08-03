@@ -34,7 +34,7 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limi
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodGet,
-		m.dataBaseEndpoint+exportUrl,
+		m.dataEndpoint+exportUrl,
 		nil,
 		None,
 		m.exportServiceAccount(), acceptPlainText(), addQueryParams(query),

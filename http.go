@@ -155,7 +155,7 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) erro
 	response, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		m.baseEndpoint+u,
+		m.ingestionEndpoint+u,
 		body,
 		None,
 	)
