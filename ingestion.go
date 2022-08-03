@@ -256,7 +256,7 @@ func (m *Mixpanel) PeopleUnionProperty(ctx context.Context, distinctID string, u
 			Union:      union,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
+	return m.doPeopleRequest(ctx, payload, peopleUnionToListUrl)
 }
 
 type peopleAppendListPayload struct {
