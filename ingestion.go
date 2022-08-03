@@ -21,7 +21,7 @@ const (
 	peopleUnionToListUrl    = "/engage#profile-union"
 	peopleAppendToListUrl   = "/engage#profile-list-append"
 	peopleRemoveFromListUrl = "/engage#profile-list-remove"
-	peopleBatchUpdateUrl    = "/engage#profile-batch-update"
+	// peopleBatchUpdateUrl    = "/engage#profile-batch-update"
 	peopleDeletePropertyUrl = "/engage#profile-unset"
 	peopleDeleteProfileUrl  = "/engage#profile-delete"
 
@@ -31,8 +31,8 @@ const (
 	groupsDeletePropertyUrl         = "/groups#group-unset"
 	groupsRemoveFromListPropertyUrl = "/groups#group-remove-from-list"
 	groupsUnionListPropertyUrl      = "/groups#group-union"
-	groupsBatchGroupProfilesUrl     = "/groups#group-batch-update"
-	groupsDeleteGroupUrl            = "/groups#group-delete"
+	// groupsBatchGroupProfilesUrl     = "/groups#group-batch-update"
+	groupsDeleteGroupUrl = "/groups#group-delete"
 
 	// Lookup tables
 	lookupTablesUrl = "/lookup-tables"
