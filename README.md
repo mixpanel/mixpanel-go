@@ -10,6 +10,5 @@
 
         // Setup up for EU Residency
         mp := NewClient(<PROJECT_ID>, "<PROJECT_TOKEN", "<PROJECT_API_SECRET>",EuResidency())
-
-        
+      
 ```
