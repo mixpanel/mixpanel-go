@@ -308,6 +308,8 @@ type peopleBatchPayload struct {
 	Add        map[string]any `json:"$add"`
 }
 
+// PeopleBatchUpdate calls the User Batch Update API
+// https://developer.mixpanel.com/reference/profile-batch-update
 func (m *Mixpanel) PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchUpdate) error {
 	var payload = make([]peopleBatchPayload, 0, len(updates))
 	for _, update := range updates {
@@ -320,15 +322,17 @@ func (m *Mixpanel) PeopleBatchUpdate(ctx context.Context, updates []PeopleBatchU
 	return m.doPeopleRequest(ctx, payload, peopleBatchUpdateUrl)
 }
 
-type peopleDeleteProfile struct {
+type peopleDeleteProfilePayload struct {
 	Token       string `json:"$token"`
 	DistinctID  string `json:"$distinct_id"`
 	Delete      string `json:"$delete"`
 	IgnoreAlias string `json:"$ignore_alias"`
 }
 
+// PeopleDeleteProfile calls the User Delete Profile API
+// https://developer.mixpanel.com/reference/delete-profile
 func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
-	payload := []peopleDeleteProfile{
+	payload := []peopleDeleteProfilePayload{
 		{
 			Token:       m.token,
 			DistinctID:  distinctID,
