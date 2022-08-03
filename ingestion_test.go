@@ -1,11 +1,15 @@
 package mixpanel
 
 import (
+	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -79,190 +83,265 @@ func TestTrack(t *testing.T) {
 
 		require.NoError(t, mp.Track(ctx, events))
 	})
+
+	t.Run("Error Occurred", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		mp := NewClient(0, "token", "api-secret")
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
+			body := `
+			{
+			  "error": "",
+			  "status": 0
+			}
+			`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		err := mp.Track(ctx, []*Event{mp.NewEvent("test-event", EmptyDistinctID, map[string]any{})})
+		var g VerboseError
+		require.ErrorAs(t, err, &g)
+	})
 }
 
-// 	t.Run("Error Occurred", func(t *testing.T) {
-// 		ctx := context.Background()
+func TestImport(t *testing.T) {
+	ctx := context.Background()
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+	getValues := func(projectID int, strict bool) url.Values {
+		query := url.Values{}
+		query.Add("verbose", "1")
+		if strict {
+			query.Add("strict", "1")
+		} else {
+			query.Add("strict", "0")
+		}
+		query.Add("project_id", strconv.Itoa(projectID))
+		return query
+	}
 
-// 		mp := NewClient(0, "token", "api-secret")
+	t.Run("api-secret-auth", func(t *testing.T) {
+		apiSecret := "api-secret-auth"
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-// 			body := `
-// 			{
-// 			  "error": "",
-// 			  "status": 0
-// 			}
-// 			`
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       ioutil.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 		err := mp.Track(ctx, []*Event{mp.NewEvent("test-event", EmptyDistinctID, map[string]any{})}, nil)
-// 		var g VerboseError
-// 		require.ErrorAs(t, err, &g)
-// 	})
-// }
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
+			authHeader := req.Header.Get("Authorization")
 
-// func TestImport(t *testing.T) {
-// 	ctx := context.Background()
+			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(apiSecret+":"))), authHeader)
 
-// 	t.Run("api-secret-auth", func(t *testing.T) {
-// 		apiSecret := "api-secret-auth"
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+		mp := NewClient(117, "token", apiSecret)
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		require.NoError(t, err)
+	})
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			authHeader := req.Header.Get("Authorization")
+	t.Run("api-service-account-aut", func(t *testing.T) {
+		userName := "username"
+		secret := "secret"
 
-// 			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(apiSecret+":"))), authHeader)
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 		mp := NewClient(117, "token", apiSecret)
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{}))
-// 	})
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			authHeader := req.Header.Get("Authorization")
 
-// 	t.Run("api-service-account-aut", func(t *testing.T) {
-// 		userName := "username"
-// 		secret := "secret"
+			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(userName+":"+secret))), authHeader)
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+		mp := NewClient(117, "token", "api-secret", SetServiceAccount(userName, secret))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		require.NoError(t, err)
+	})
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			authHeader := req.Header.Get("Authorization")
+	t.Run("api-compression-none", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(userName+":"+secret))), authHeader)
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
+			authHeader := req.Header.Get(contentEncodingHeader)
+			require.Equal(t, "", authHeader)
 
-// 		mp := NewClient(117, "token", "api-secret", SetServiceAccount(userName, secret))
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{}))
-// 	})
+			data, err := ioutil.ReadAll(req.Body)
+			require.NoError(t, err)
 
-// 	t.Run("api-compression-none", func(t *testing.T) {
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+			var e []*Event
+			require.NoError(t, json.Unmarshal(data, &e))
+			require.Len(t, e, 1)
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			authHeader := req.Header.Get(contentEncodingHeader)
-// 			require.Equal(t, "", authHeader)
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 			data, err := ioutil.ReadAll(req.Body)
-// 			require.NoError(t, err)
+		mp := NewClient(117, "token", "auth-secret")
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+			Compression: None,
+		})
+		require.NoError(t, err)
+	})
 
-// 			var e []*Event
-// 			require.NoError(t, json.Unmarshal(data, &e))
-// 			require.Len(t, e, 1)
+	t.Run("api-compression-gzip", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
+			authHeader := req.Header.Get(contentEncodingHeader)
+			require.Equal(t, "gzip", authHeader)
 
-// 		mp := NewClient(117, "token", "auth-secret")
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-// 			Compression: None,
-// 		}))
-// 	})
+			reader, err := gzip.NewReader(req.Body)
+			require.NoError(t, err)
 
-// 	t.Run("api-compression-gzip", func(t *testing.T) {
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+			data, err := ioutil.ReadAll(reader)
+			require.NoError(t, err)
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			authHeader := req.Header.Get(contentEncodingHeader)
-// 			require.Equal(t, "gzip", authHeader)
+			var e []*Event
+			require.NoError(t, json.Unmarshal(data, &e))
+			require.Len(t, e, 1)
 
-// 			reader, err := gzip.NewReader(req.Body)
-// 			require.NoError(t, err)
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 			data, err := ioutil.ReadAll(reader)
-// 			require.NoError(t, err)
+		mp := NewClient(117, "token", "auth-secret")
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+			Compression: Gzip,
+		})
+		require.NoError(t, err)
+	})
 
-// 			var e []*Event
-// 			require.NoError(t, json.Unmarshal(data, &e))
-// 			require.Len(t, e, 1)
+	t.Run("api-strict-enable", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, true), func(req *http.Request) (*http.Response, error) {
+			query := req.URL.Query()
 
-// 		mp := NewClient(117, "token", "auth-secret")
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-// 			Compression: Gzip,
-// 		}))
-// 	})
+			require.Equal(t, "1", query.Get("strict"))
 
-// 	t.Run("api-strict-enable", func(t *testing.T) {
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			query := req.URL.Query()
+		mp := NewClient(117, "token", "auth-secret")
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+			Strict: true,
+		})
+		require.NoError(t, err)
+	})
 
-// 			require.Equal(t, "1", query.Get("strict"))
+	t.Run("api-strict-disable", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
+			query := req.URL.Query()
 
-// 		mp := NewClient(117, "token", "auth-secret")
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-// 			Strict: true,
-// 		}))
-// 	})
+			require.Equal(t, "0", query.Get("strict"))
 
-// 	t.Run("api-strict-disable", func(t *testing.T) {
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			query := req.URL.Query()
+		mp := NewClient(117, "token", "auth-secret")
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+			Strict: false,
+		})
+		require.NoError(t, err)
+	})
 
-// 			require.Equal(t, "0", query.Get("strict"))
+	t.Run("api-project-set-correctly", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
 
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
+			query := req.URL.Query()
 
-// 		mp := NewClient(117, "token", "auth-secret")
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-// 			Strict: false,
-// 		}))
-// 	})
+			require.Equal(t, "117", query.Get("project_id"))
 
-// 	t.Run("api-project-set-correctly", func(t *testing.T) {
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: 200,
+				Body:       ioutil.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-// 			query := req.URL.Query()
+		mp := NewClient(117, "token", "auth-secret")
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+			Strict: false,
+		})
+		require.NoError(t, err)
+	})
 
-// 			require.Equal(t, "117", query.Get("project_id"))
-
-// 			return &http.Response{
-// 				StatusCode: 200,
-// 			}, nil
-// 		})
-
-// 		mp := NewClient(117, "token", "auth-secret")
-// 		require.NoError(t, mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-// 			Strict: false,
-// 		}))
-// 	})
-
-// }
+}

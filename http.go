@@ -43,24 +43,25 @@ func (m *Mixpanel) doRequest(
 	compression MpCompression,
 	params url.Values,
 ) (*http.Response, error) {
-	body, err := json.Marshal(dataBody)
+	var payloadBody []byte
+
+	uncompressedBody, err := json.Marshal(dataBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http body: %w", err)
 	}
+	payloadBody = uncompressedBody
 
 	var contentHeader string
 	switch compression {
 	case Gzip:
-		body, err = gzipBody(body)
+		payloadBody, err = gzipBody(uncompressedBody)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compress: %w", err)
 		}
 		contentHeader = "gzip"
 	}
 
-	fmt.Printf("%s \n %s \n", url, string(body))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payloadBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -81,6 +82,16 @@ func (m *Mixpanel) doRequest(
 		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
 	} else {
 		req.SetBasicAuth(m.apiSecret, "")
+	}
+
+	query := req.URL.Query()
+	for k, v := range params {
+		query[k] = v
+	}
+	req.URL.RawQuery = query.Encode()
+
+	if m.debugHttp {
+		fmt.Printf("Url -> %s\nPayload -> %s \n", req.URL.String(), uncompressedBody)
 	}
 
 	httpResponse, err := m.client.Do(req)

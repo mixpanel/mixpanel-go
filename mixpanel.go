@@ -43,7 +43,7 @@ var (
 type Ingestion interface {
 	// Events
 	Track(ctx context.Context, events []*Event) error
-	Import(ctx context.Context, events []*Event, options ImportOptions) error
+	Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error)
 
 	// People
 
@@ -67,6 +67,8 @@ type Mixpanel struct {
 	apiSecret string
 
 	serviceAccount *ServiceAccount
+
+	debugHttp bool
 }
 
 type Options func(mixpanel *Mixpanel)
@@ -102,6 +104,13 @@ func SetServiceAccount(username, secret string) Options {
 			Username: username,
 			Secret:   secret,
 		}
+	}
+}
+
+// DebugHttpCalls prints payload information and url information for debugging purposes
+func DebugHttpCalls() Options {
+	return func(mixpanel *Mixpanel) {
+		mixpanel.debugHttp = true
 	}
 }
 

@@ -52,7 +52,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to call track event: %w", err)
+		return fmt.Errorf("failed to track event: %w", err)
 	}
 	defer response.Body.Close()
 
@@ -88,6 +88,12 @@ var ImportOptionsRecommend = ImportOptions{
 	Compression: Gzip,
 }
 
+type ImportSuccess struct {
+	Code               int         `json:"code"`
+	NumRecordsImported int         `json:"num_records_imported"`
+	Status             interface{} `json:"status"`
+}
+
 type ImportGenericError struct {
 	Code     int         `json:"code"`
 	ApiError string      `json:"error"`
@@ -100,43 +106,52 @@ func (e ImportGenericError) Error() string {
 
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
-func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) error {
+func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
 
-	var values url.Values
-	values.Add("strict", strconv.FormatBool(options.Strict))
+	values := url.Values{}
+	if options.Strict {
+		values.Add("strict", "1")
+	} else {
+		values.Add("strict", "0")
+	}
 	values.Add("project_id", strconv.Itoa(m.projectID))
+	values.Add("verbose", "1")
 
 	httpResponse, err := m.doRequest(
 		ctx,
 		events,
-		importURL,
+		m.baseEndpoint+importURL,
 		true,
 		true,
 		options.Compression,
 		values,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to import:%w", err)
+		return nil, fmt.Errorf("failed to import:%w", err)
 	}
 	defer httpResponse.Body.Close()
 
 	switch httpResponse.StatusCode {
-	case 200:
-		return nil
-	case 400:
+	case http.StatusOK:
+		var s ImportSuccess
+		if err := json.NewDecoder(httpResponse.Body).Decode(&s); err != nil {
+			return nil, fmt.Errorf("failed to parse response body:%w", err)
+		}
+		return &s, nil
+	case http.StatusBadRequest:
 		var g ImportFailedValidationError
 		if err := json.NewDecoder(httpResponse.Body).Decode(&g); err != nil {
-			return fmt.Errorf("failed to json decode response body: %w", err)
+			return nil, fmt.Errorf("failed to json decode response body: %w", err)
 		}
-		return g
-	case 401, 413, 429:
+		return nil, g
+	case http.StatusUnauthorized, http.StatusRequestEntityTooLarge, http.StatusTooManyRequests:
 		var g ImportGenericError
 		if err := json.NewDecoder(httpResponse.Body).Decode(&g); err != nil {
-			return fmt.Errorf("failed to json decode response body: %w", err)
+			return nil, fmt.Errorf("failed to json decode response body: %w", err)
 		}
-		return g
+		return nil, g
 	default:
-		return fmt.Errorf("unexpected status code: %d", httpResponse.StatusCode)
+		return nil, fmt.Errorf("unexpected status code: %d", httpResponse.StatusCode)
 	}
 }
 
