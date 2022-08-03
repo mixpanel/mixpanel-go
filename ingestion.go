@@ -240,14 +240,16 @@ func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add m
 	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
 }
 
-type peopleAppendListProperty struct {
+type peopleAppendListPayload struct {
 	Token      string            `json:"$token"`
 	DistinctID string            `json:"$distinct_id"`
 	Append     map[string]string `json:"$append"`
 }
 
+// PeopleAppend calls the Increment Numerical Property
+// https://developer.mixpanel.com/reference/profile-numerical-add
 func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]string) error {
-	payload := []peopleAppendListProperty{
+	payload := []peopleAppendListPayload{
 		{
 			Token:      m.token,
 			DistinctID: distinctID,
