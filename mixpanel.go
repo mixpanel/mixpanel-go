@@ -28,8 +28,6 @@ const (
 	acceptHeader          = "Accept"
 	acceptPlainTextHeader = "text/plain"
 	acceptJsonHeader      = "application/json"
-	contentType           = "Content-Type"
-	contentTypeJson       = "application/json"
 	contentEncodingHeader = "Content-Encoding"
 )
 
