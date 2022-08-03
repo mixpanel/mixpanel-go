@@ -5,13 +5,18 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"cloud.google.com/go/civil"
 )
 
 const (
 	version = "v0.0.1"
 
-	usEndpoint = "https://api.mixpanel.com"
-	euEndpoint = "https://api-eu.mixpanel.com"
+	usEndpoint     = "https://api.mixpanel.com"
+	usDataEndpoint = "https://data.mixpanel.com"
+
+	euEndpoint     = "https://api-eu.mixpanel.com"
+	euDataEndpoint = "https://data-eu.mixpanel"
 
 	EmptyDistinctID = ""
 
@@ -67,6 +72,12 @@ type Ingestion interface {
 
 var _ Ingestion = (*Mixpanel)(nil)
 
+type Export interface {
+	Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string)
+}
+
+// var _ Export = (*Mixpanel)(nil)
+
 // MpApi is all the API's in the Mixpanel docs
 // https://developer.mixpanel.com/reference/overview
 type MpApi interface {
@@ -79,8 +90,9 @@ type ServiceAccount struct {
 }
 
 type Mixpanel struct {
-	client       *http.Client
-	baseEndpoint string
+	client           *http.Client
+	baseEndpoint     string
+	dataBaseEndpoint string
 
 	projectID int
 	token     string
@@ -105,6 +117,7 @@ func HttpClient(client *http.Client) Options {
 func EuResidency() Options {
 	return func(mixpanel *Mixpanel) {
 		mixpanel.baseEndpoint = euEndpoint
+		mixpanel.baseEndpoint = euDataEndpoint
 	}
 }
 
@@ -113,6 +126,7 @@ func EuResidency() Options {
 func ProxyLocation(proxy string) Options {
 	return func(mixpanel *Mixpanel) {
 		mixpanel.baseEndpoint = proxy
+		mixpanel.dataBaseEndpoint = proxy
 	}
 }
 
@@ -137,11 +151,12 @@ func DebugHttpCalls() Options {
 // NewClient create a new mixpanel client
 func NewClient(projectID int, token, secret string, options ...Options) *Mixpanel {
 	mp := &Mixpanel{
-		projectID:    projectID,
-		client:       http.DefaultClient,
-		baseEndpoint: usEndpoint,
-		token:        token,
-		apiSecret:    secret,
+		projectID:        projectID,
+		client:           http.DefaultClient,
+		baseEndpoint:     usEndpoint,
+		dataBaseEndpoint: usDataEndpoint,
+		token:            token,
+		apiSecret:        secret,
 	}
 
 	for _, o := range options {

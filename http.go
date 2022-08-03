@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 var (
@@ -46,6 +47,21 @@ func (m *Mixpanel) useServiceAccount() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
 			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+		} else {
+			req.SetBasicAuth(m.apiSecret, "")
+		}
+	}
+}
+
+// exportServiceAccount uses the service account if available and adds the query params
+// or falls back to apiSecret
+func (m *Mixpanel) exportServiceAccount() httpOptions {
+	return func(req *http.Request) {
+		if m.serviceAccount != nil {
+			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+			values := url.Values{}
+			values.Add("project_id", strconv.Itoa(m.projectID))
+			addQueryParams(values)
 		} else {
 			req.SetBasicAuth(m.apiSecret, "")
 		}
