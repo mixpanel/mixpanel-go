@@ -240,6 +240,25 @@ func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add m
 	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
 }
 
+type peopleUnionPayload struct {
+	Token      string         `json:"$token"`
+	DistinctID string         `json:"$distinct_id"`
+	Union      map[string]any `json:"$union"`
+}
+
+// PeopleUnionProperty calls User Union To List Property API
+// https://developer.mixpanel.com/reference/user-profile-union
+func (m *Mixpanel) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
+	payload := []peopleUnionPayload{
+		{
+			Token:      m.token,
+			DistinctID: distinctID,
+			Union:      union,
+		},
+	}
+	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
+}
+
 type peopleAppendListPayload struct {
 	Token      string            `json:"$token"`
 	DistinctID string            `json:"$distinct_id"`

@@ -102,7 +102,6 @@ func (m *Mixpanel) doRequest(
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
-
 	response, err := m.doRequest(ctx, body, m.baseEndpoint+u, false, false, None, nil)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
