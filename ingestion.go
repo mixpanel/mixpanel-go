@@ -44,6 +44,7 @@ const (
 func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	response, err := m.doRequest(
 		ctx,
+		http.MethodPost,
 		events,
 		m.baseEndpoint+trackURL,
 		false,
@@ -119,6 +120,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 
 	httpResponse, err := m.doRequest(
 		ctx,
+		http.MethodPost,
 		events,
 		m.baseEndpoint+importURL,
 		true,
@@ -469,7 +471,16 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 	query := url.Values{}
 	query.Add("project_id", strconv.Itoa(m.projectID))
 
-	httpResponse, err := m.doRequest(ctx, nil, m.baseEndpoint+lookupTablesUrl, true, true, None, query)
+	httpResponse, err := m.doRequest(
+		ctx,
+		http.MethodGet,
+		nil,
+		m.baseEndpoint+lookupTablesUrl,
+		true,
+		true,
+		None,
+		query,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call list lookup tables: %v", err)
 	}
@@ -490,6 +501,6 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 		}
 		return nil, e
 	default:
-		return nil, ErrStatusCode
+		return nil, fmt.Errorf("unexpected status code: %d", httpResponse.StatusCode)
 	}
 }

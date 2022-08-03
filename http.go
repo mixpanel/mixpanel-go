@@ -36,6 +36,7 @@ func (p PeopleError) Error() string {
 
 func (m *Mixpanel) doRequest(
 	ctx context.Context,
+	method string,
 	dataBody any,
 	url string,
 	acceptJson, useServiceAccount bool,
@@ -43,24 +44,33 @@ func (m *Mixpanel) doRequest(
 	params url.Values,
 ) (*http.Response, error) {
 	var payloadBody []byte
-
-	uncompressedBody, err := json.Marshal(dataBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create http body: %w", err)
-	}
-	payloadBody = uncompressedBody
-
+	var uncompressedBody []byte
 	var contentHeader string
-	switch compression {
-	case Gzip:
-		payloadBody, err = gzipBody(uncompressedBody)
+
+	if dataBody != nil {
+		var err error
+		uncompressedBody, err = json.Marshal(dataBody)
 		if err != nil {
-			return nil, fmt.Errorf("failed to compress: %w", err)
+			return nil, fmt.Errorf("failed to create http body: %w", err)
 		}
-		contentHeader = "gzip"
+		payloadBody = uncompressedBody
+
+		switch compression {
+		case Gzip:
+			payloadBody, err = gzipBody(uncompressedBody)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compress: %w", err)
+			}
+			contentHeader = "gzip"
+		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payloadBody))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		method,
+		url,
+		bytes.NewReader(payloadBody),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -70,12 +80,10 @@ func (m *Mixpanel) doRequest(
 	}
 
 	if acceptJson {
-		req.Header.Add(acceptHeader, acceptJsonHeader)
+		req.Header.Set(acceptHeader, acceptJsonHeader)
 	} else {
-		req.Header.Add(acceptHeader, acceptPlainTextHeader)
+		req.Header.Set(acceptHeader, acceptPlainTextHeader)
 	}
-
-	req.Header.Add(contentType, contentTypeJson)
 
 	if m.serviceAccount != nil {
 		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
@@ -91,6 +99,10 @@ func (m *Mixpanel) doRequest(
 
 	if m.debugHttp {
 		fmt.Printf("Url -> %s\nPayload -> %s \n", req.URL.String(), uncompressedBody)
+		fmt.Println("Headers")
+		for h, v := range req.Header {
+			fmt.Println(h, v)
+		}
 	}
 
 	httpResponse, err := m.client.Do(req)
@@ -102,7 +114,16 @@ func (m *Mixpanel) doRequest(
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
-	response, err := m.doRequest(ctx, body, m.baseEndpoint+u, false, false, None, nil)
+	response, err := m.doRequest(
+		ctx,
+		http.MethodPost,
+		body,
+		m.baseEndpoint+u,
+		false,
+		false,
+		None,
+		nil,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
 	}
