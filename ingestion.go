@@ -158,7 +158,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 // PeopleOptions
 type peopleOptions struct {
 	IP        string  `json:"$ip,omitempty"`
-	Latitude  float64 `json:"$lat,omitempty"`
+	Latitude  float64 `json:"$latitude,omitempty"`
 	Longitude float64 `json:"$longitude,omitempty"`
 }
 
@@ -203,17 +203,20 @@ type peopleSetOncePayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	SetOnce    map[string]any `json:"$set_once"`
+	*peopleOptions
 }
 
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
-	payload := []peopleSetOncePayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			SetOnce:    properties,
-		},
+func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
+	payload := peopleSetOncePayload{
+		Token:         m.token,
+		DistinctID:    distinctID,
+		SetOnce:       properties,
+		peopleOptions: &peopleOptions{},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleSetOnceURL)
+	for _, o := range options {
+		o(payload.peopleOptions)
+	}
+	return m.doPeopleRequest(ctx, []peopleSetOncePayload{payload}, peopleSetOnceURL)
 }
 
 type peopleNumericalProperty struct {
