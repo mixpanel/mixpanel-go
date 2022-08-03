@@ -59,6 +59,7 @@ type Ingestion interface {
 	// Groups
 
 	// Lookup
+	ListLookupTables(ctx context.Context) (*LookupTable, error)
 }
 
 var _ Ingestion = (*Mixpanel)(nil)

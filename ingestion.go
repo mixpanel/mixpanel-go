@@ -35,7 +35,7 @@ const (
 	groupsDeleteGroupUrl            = "/groups#group-delete"
 
 	// Lookup tables
-	lookupUrl = "/lookup-tables"
+	lookupTablesUrl = "/lookup-tables"
 )
 
 // Track calls the Track endpoint
@@ -463,24 +463,17 @@ func (e LookupTableError) Error() string {
 	return e.ApiError
 }
 
+// ListLookupTables calls the List Lookup Tables API
+// https://developer.mixpanel.com/reference/list-lookup-tables
 func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.baseEndpoint+lookupUrl+"?project_id="+strconv.Itoa(m.projectID), nil)
+	query := url.Values{}
+	query.Add("project_id", strconv.Itoa(m.projectID))
+
+	httpResponse, err := m.doRequest(ctx, nil, m.baseEndpoint+lookupTablesUrl, true, true, None, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create http request:%w", err)
+		return nil, fmt.Errorf("failed to call list lookup tables: %v", err)
 	}
 
-	req.Header.Add(acceptHeader, acceptJsonHeader)
-
-	if m.serviceAccount != nil {
-		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
-	} else {
-		return nil, fmt.Errorf("need service account")
-	}
-
-	httpResponse, err := m.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call lookup table: %w", err)
-	}
 	defer httpResponse.Body.Close()
 
 	switch httpResponse.StatusCode {
