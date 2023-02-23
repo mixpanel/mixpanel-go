@@ -27,9 +27,6 @@ const (
 // Export(ctx, fromDate, toDate, ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
 func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string) ([]*Event, error) {
 	query := url.Values{}
-	if m.serviceAccount != nil {
-		query.Add("project_id", strconv.Itoa(m.projectID))
-	}
 	query.Add("from_date", fromDate.String())
 	query.Add("to_date", toDate.String())
 	if limit != ExportNoLimit {

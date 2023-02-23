@@ -61,7 +61,7 @@ func (m *Mixpanel) exportServiceAccount() httpOptions {
 			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
 			values := url.Values{}
 			values.Add("project_id", strconv.Itoa(m.projectID))
-			addQueryParams(values)
+			addQueryParams(values)(req)
 		} else {
 			req.SetBasicAuth(m.apiSecret, "")
 		}
