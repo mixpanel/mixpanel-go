@@ -1,10 +1,10 @@
 package mixpanel
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,14 +14,25 @@ import (
 
 const (
 	exportUrl = "/api/2.0/export"
+
+	ExportNoLimit       int    = 0
+	ExportNoEventFilter string = ""
+	ExportNoWhereFilter string = ""
 )
 
+// Export calls the Raw Export API
+// https://developer.mixpanel.com/reference/raw-event-export
+
+// Example on how to explore everything fromDate - toDate
+// Export(ctx, fromDate, toDate, ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
 func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string) ([]*Event, error) {
 	query := url.Values{}
-	query.Add("project_id", strconv.Itoa(m.projectID))
+	if m.serviceAccount != nil {
+		query.Add("project_id", strconv.Itoa(m.projectID))
+	}
 	query.Add("from_date", fromDate.String())
 	query.Add("to_date", fromDate.String())
-	if limit != 0 {
+	if limit != ExportNoLimit {
 		query.Add("limit", strconv.Itoa(limit))
 	}
 	if event != "" {
@@ -46,19 +57,24 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limi
 
 	switch httpResponse.StatusCode {
 	case http.StatusOK:
-		var e []*Event
+		var results []*Event
 
-		scanner := bufio.NewScanner(httpResponse.Body)
-		for scanner.Scan() {
-			var event *Event
-			if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-				return nil, fmt.Errorf("failed to parse event: %v", err)
+		dec := json.NewDecoder(httpResponse.Body)
+		for dec.More() {
+			var e *Event
+			err := dec.Decode(&e)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode event:%w", err)
 			}
-			e = append(e, event)
+			results = append(results, e)
 		}
-		return e, nil
+		return results, nil
 
 	default:
-		return nil, fmt.Errorf("unexpected status code: %d", httpResponse.StatusCode)
+		body, err := io.ReadAll(httpResponse.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("unexpected status code: %d(%s)", httpResponse.StatusCode, body)
 	}
 }
