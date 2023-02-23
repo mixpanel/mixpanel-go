@@ -3,9 +3,9 @@ module mixpanel/mixpanel-go
 go 1.18
 
 require (
-	cloud.google.com/go v0.103.0
-	github.com/jarcoal/httpmock v1.2.0
-	github.com/stretchr/testify v1.8.0
+	cloud.google.com/go v0.110.0
+	github.com/jarcoal/httpmock v1.3.0
+	github.com/stretchr/testify v1.8.1
 )
 
 require (
