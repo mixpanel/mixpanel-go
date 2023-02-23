@@ -31,7 +31,7 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limi
 		query.Add("project_id", strconv.Itoa(m.projectID))
 	}
 	query.Add("from_date", fromDate.String())
-	query.Add("to_date", fromDate.String())
+	query.Add("to_date", toDate.String())
 	if limit != ExportNoLimit {
 		query.Add("limit", strconv.Itoa(limit))
 	}

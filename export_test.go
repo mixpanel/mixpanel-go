@@ -2,8 +2,10 @@ package mixpanel
 
 import (
 	"context"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -25,10 +27,15 @@ func TestExport(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
 
-		httpmock.RegisterResponder(http.MethodGet, "https://data.mixpanel.com/api/2.0/export?from_date=2023-01-01&project_id=117&to_date=2023-01-01", func(req *http.Request) (*http.Response, error) {
+		queryParams := url.Values{}
+		queryParams.Add("from_date", "2023-01-01")
+		queryParams.Add("to_date", "2023-01-02")
+		queryParams.Add("project_id", "117")
+
+		httpmock.RegisterMatcherResponderWithQuery(http.MethodGet, fmt.Sprintf("%s%s", usDataEndpoint, exportUrl), queryParams, httpmock.Matcher{}, func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader("")),
+				Body:       io.NopCloser(strings.NewReader("")),
 			}, nil
 		})
 
@@ -43,10 +50,14 @@ func TestExport(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
 
-		httpmock.RegisterResponder(http.MethodGet, "https://data.mixpanel.com/api/2.0/export?from_date=2023-01-01&to_date=2023-01-01", func(req *http.Request) (*http.Response, error) {
+		queryParams := url.Values{}
+		queryParams.Add("from_date", "2023-01-01")
+		queryParams.Add("to_date", "2023-01-02")
+
+		httpmock.RegisterMatcherResponderWithQuery(http.MethodGet, fmt.Sprintf("%s%s", usDataEndpoint, exportUrl), queryParams, httpmock.Matcher{}, func(req *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader("")),
+				Body:       io.NopCloser(strings.NewReader("")),
 			}, nil
 		})
 
