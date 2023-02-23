@@ -72,6 +72,9 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limi
 		if err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("unexpected status code: %d(%s)", httpResponse.StatusCode, body)
+		return nil, HttpError{
+			Status: httpResponse.StatusCode,
+			Body:   string(body),
+		}
 	}
 }

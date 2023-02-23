@@ -18,6 +18,15 @@ var (
 	apiErrorStatus = 0
 )
 
+type HttpError struct {
+	Status int
+	Body   string
+}
+
+func (h HttpError) Error() string {
+	return ErrStatusCode.Error()
+}
+
 type VerboseError struct {
 	ApiError string `json:"error"`
 	Status   int    `json:"status"`
