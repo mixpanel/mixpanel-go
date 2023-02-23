@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -43,7 +43,7 @@ func TestTrack(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -77,7 +77,7 @@ func TestTrack(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -101,7 +101,7 @@ func TestTrack(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -146,7 +146,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -175,7 +175,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -192,7 +192,7 @@ func TestImport(t *testing.T) {
 			authHeader := req.Header.Get(contentEncodingHeader)
 			require.Equal(t, "", authHeader)
 
-			data, err := ioutil.ReadAll(req.Body)
+			data, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
 
 			var e []*Event
@@ -208,7 +208,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -230,7 +230,7 @@ func TestImport(t *testing.T) {
 			reader, err := gzip.NewReader(req.Body)
 			require.NoError(t, err)
 
-			data, err := ioutil.ReadAll(reader)
+			data, err := io.ReadAll(reader)
 			require.NoError(t, err)
 
 			var e []*Event
@@ -246,7 +246,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -275,7 +275,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -304,7 +304,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 
@@ -333,7 +333,7 @@ func TestImport(t *testing.T) {
 			`
 			return &http.Response{
 				StatusCode: 200,
-				Body:       ioutil.NopCloser(strings.NewReader(body)),
+				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
 

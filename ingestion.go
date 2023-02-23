@@ -49,7 +49,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	response, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		m.baseEndpoint+trackURL,
+		m.ingestionEndpoint+trackURL,
 		events,
 		None,
 		addQueryParams(query), acceptPlainText(),
@@ -123,7 +123,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		m.baseEndpoint+importURL,
+		m.ingestionEndpoint+importURL,
 		events,
 		options.Compression,
 		addQueryParams(values), acceptJson(), m.useServiceAccount(),
@@ -496,7 +496,7 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodGet,
-		m.baseEndpoint+lookupTablesUrl,
+		m.ingestionEndpoint+lookupTablesUrl,
 		nil,
 		None,
 		addQueryParams(query), acceptJson(),

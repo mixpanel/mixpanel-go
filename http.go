@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 var (
@@ -16,6 +17,15 @@ var (
 
 	apiErrorStatus = 0
 )
+
+type HttpError struct {
+	Status int
+	Body   string
+}
+
+func (h HttpError) Error() string {
+	return ErrStatusCode.Error()
+}
 
 type VerboseError struct {
 	ApiError string `json:"error"`
@@ -46,6 +56,21 @@ func (m *Mixpanel) useServiceAccount() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
 			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+		} else {
+			req.SetBasicAuth(m.apiSecret, "")
+		}
+	}
+}
+
+// exportServiceAccount uses the service account if available and adds the query params
+// or falls back to apiSecret
+func (m *Mixpanel) exportServiceAccount() httpOptions {
+	return func(req *http.Request) {
+		if m.serviceAccount != nil {
+			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+			values := url.Values{}
+			values.Add("project_id", strconv.Itoa(m.projectID))
+			addQueryParams(values)(req)
 		} else {
 			req.SetBasicAuth(m.apiSecret, "")
 		}
@@ -139,7 +164,7 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) erro
 	response, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		m.baseEndpoint+u,
+		m.ingestionEndpoint+u,
 		body,
 		None,
 	)
