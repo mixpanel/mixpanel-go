@@ -78,6 +78,12 @@ type Export interface {
 
 var _ Export = (*Mixpanel)(nil)
 
+type Identity interface {
+	CreateIdentity(ctx context.Context, events []*IdentityEvent, options IdentityOptions) error
+}
+
+var _ Identity = (*Mixpanel)(nil)
+
 // MpApi is all the API's in the Mixpanel docs
 // https://developer.mixpanel.com/reference/overview
 type MpApi interface {
@@ -90,9 +96,9 @@ type ServiceAccount struct {
 }
 
 type Mixpanel struct {
-	client            *http.Client
-	ingestionEndpoint string
-	dataEndpoint      string
+	client       *http.Client
+	apiEndpoint  string
+	dataEndpoint string
 
 	projectID int
 	token     string
@@ -116,7 +122,7 @@ func HttpClient(client *http.Client) Options {
 // Use for EU Projects
 func EuResidency() Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.ingestionEndpoint = euEndpoint
+		mixpanel.apiEndpoint = euEndpoint
 		mixpanel.dataEndpoint = euDataEndpoint
 	}
 }
@@ -125,7 +131,7 @@ func EuResidency() Options {
 // Example: http://locahosthost:8080
 func ProxyApiLocation(proxy string) Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.ingestionEndpoint = proxy
+		mixpanel.apiEndpoint = proxy
 	}
 }
 
@@ -158,12 +164,12 @@ func DebugHttpCalls() Options {
 // NewClient create a new mixpanel client
 func NewClient(projectID int, token, secret string, options ...Options) *Mixpanel {
 	mp := &Mixpanel{
-		projectID:         projectID,
-		client:            http.DefaultClient,
-		ingestionEndpoint: usEndpoint,
-		dataEndpoint:      usDataEndpoint,
-		token:             token,
-		apiSecret:         secret,
+		projectID:    projectID,
+		client:       http.DefaultClient,
+		apiEndpoint:  usEndpoint,
+		dataEndpoint: usDataEndpoint,
+		token:        token,
+		apiSecret:    secret,
 	}
 
 	for _, o := range options {
@@ -212,4 +218,37 @@ func (e *Event) AddInsertID(insertID string) {
 // https://developer.mixpanel.com/reference/import-events#geoip-enrichment
 func (e *Event) AddIP(ip *net.IP) {
 	e.Properties[propertyIP] = ip.String()
+}
+
+type IdentityEvent struct {
+	*Event
+}
+
+func (m *Mixpanel) NewIdentityEvent(distinctID string, properties map[string]any, identifiedId, anonId string) *IdentityEvent {
+	event := m.NewEvent("$identify", distinctID, properties)
+	i := &IdentityEvent{
+		Event: event,
+	}
+	i.SetIdentifiedId(identifiedId)
+	i.SetAnonId(anonId)
+
+	return i
+}
+
+func (i *IdentityEvent) IdentifiedId() any {
+	return i.Properties["$identified_id"]
+}
+
+// A distinct_id to merge with the $anon_id.
+func (i *IdentityEvent) SetIdentifiedId(id string) {
+	i.Properties["$identified_id"] = id
+}
+
+// A distinct_id to merge with the $identified_id. The $anon_id must be UUID v4 format and not already merged to an $identified_id.
+func (i *IdentityEvent) SetAnonId(id string) {
+	i.Properties["$anon_id"] = id
+}
+
+func (i *IdentityEvent) AnonId(id string) {
+	i.Properties["$anon_id"] = id
 }

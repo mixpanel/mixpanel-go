@@ -9,7 +9,7 @@ import (
 func TestMixpanelOptions(t *testing.T) {
 	t.Run("eu residency", func(t *testing.T) {
 		mp := NewClient(0, "", "", EuResidency())
-		require.Equal(t, mp.ingestionEndpoint, euEndpoint)
+		require.Equal(t, mp.apiEndpoint, euEndpoint)
 		require.Equal(t, mp.dataEndpoint, euDataEndpoint)
 	})
 	t.Run("service account", func(t *testing.T) {
@@ -21,7 +21,7 @@ func TestMixpanelOptions(t *testing.T) {
 
 	t.Run("set proxy", func(t *testing.T) {
 		mp := NewClient(0, "", "", ProxyApiLocation("https://localhost:8080"))
-		require.Equal(t, "https://localhost:8080", mp.ingestionEndpoint)
+		require.Equal(t, "https://localhost:8080", mp.apiEndpoint)
 	})
 	t.Run("debug http", func(t *testing.T) {
 		mp := NewClient(0, "", "", DebugHttpCalls())
