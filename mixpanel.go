@@ -6,8 +6,6 @@ import (
 	"net"
 	"net/http"
 	"time"
-
-	"cloud.google.com/go/civil"
 )
 
 const (
@@ -74,7 +72,7 @@ type Ingestion interface {
 var _ Ingestion = (*Mixpanel)(nil)
 
 type Export interface {
-	Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string) ([]*Event, error)
+	Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error)
 }
 
 var _ Export = (*Mixpanel)(nil)
