@@ -2,6 +2,7 @@ package mixpanel
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"time"
@@ -193,6 +194,23 @@ func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[strin
 	e.Properties = properties
 
 	return e
+}
+
+func (m *Mixpanel) NewEventFromJson(json map[string]any) (*Event, error) {
+	name, ok := json["event"].(string)
+	if !ok {
+		return nil, errors.New("event name is not a string or is missing")
+	}
+
+	properties, ok := json["properties"].(map[string]any)
+	if !ok {
+		return nil, errors.New("event properties is not a map or is missing")
+	}
+
+	return &Event{
+		Name:       name,
+		Properties: properties,
+	}, nil
 }
 
 // AddTime insert the time properties into the event
