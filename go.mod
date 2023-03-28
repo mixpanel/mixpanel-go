@@ -1,11 +1,11 @@
-module mixpanel/mixpanel-go
+module github.com/mixpanel/mixpanel-go
 
-go 1.18
+go 1.19
 
 require (
 	cloud.google.com/go v0.110.0
 	github.com/jarcoal/httpmock v1.3.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 )
 
 require (
