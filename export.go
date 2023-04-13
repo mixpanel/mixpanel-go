@@ -8,8 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-
-	"cloud.google.com/go/civil"
+	"time"
 )
 
 const (
@@ -25,10 +24,10 @@ const (
 
 // Example on how to explore everything fromDate - toDate
 // Export(ctx, fromDate, toDate, ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
-func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate civil.Date, limit int, event, where string) ([]*Event, error) {
+func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error) {
 	query := url.Values{}
-	query.Add("from_date", fromDate.String())
-	query.Add("to_date", toDate.String())
+	query.Add("from_date", fromDate.Format("2006-01-02"))
+	query.Add("to_date", toDate.Format("2006-01-02"))
 	if limit != ExportNoLimit {
 		query.Add("limit", strconv.Itoa(limit))
 	}
