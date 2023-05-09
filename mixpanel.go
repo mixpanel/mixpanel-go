@@ -189,6 +189,9 @@ func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[strin
 	e := &Event{
 		Name: name,
 	}
+	if properties == nil {
+		properties = make(map[string]any)
+	}
 
 	// Todo: deep copy map
 	properties[propertyToken] = m.token
