@@ -49,7 +49,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	response, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		m.ingestionEndpoint+trackURL,
+		m.apiEndpoint+trackURL,
 		events,
 		None,
 		addQueryParams(query), acceptPlainText(),
@@ -110,7 +110,6 @@ func (e ImportGenericError) Error() string {
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
 func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
-
 	values := url.Values{}
 	if options.Strict {
 		values.Add("strict", "1")
@@ -123,7 +122,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodPost,
-		m.ingestionEndpoint+importURL,
+		m.apiEndpoint+importURL,
 		events,
 		options.Compression,
 		addQueryParams(values), acceptJson(), m.useServiceAccount(),
@@ -496,7 +495,7 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 	httpResponse, err := m.doRequest(
 		ctx,
 		http.MethodGet,
-		m.ingestionEndpoint+lookupTablesUrl,
+		m.apiEndpoint+lookupTablesUrl,
 		nil,
 		None,
 		addQueryParams(query), acceptJson(),
