@@ -8,16 +8,16 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
-	"cloud.google.com/go/civil"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/require"
 )
 
-func parseDate(t *testing.T, s string) civil.Date {
-	d, err := civil.ParseDate(s)
+func parseDate(t *testing.T, s string) time.Time {
+	date, err := time.Parse("2006-01-02", s)
 	require.NoError(t, err)
-	return d
+	return date
 }
 
 func TestExport(t *testing.T) {

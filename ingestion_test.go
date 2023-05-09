@@ -345,3 +345,24 @@ func TestImport(t *testing.T) {
 	})
 
 }
+
+func TestNewEventFromJson(t *testing.T) {
+	jsonPayload := `
+	{
+		"properties": {
+		  "key": "value"
+		},
+		"event": "test_event"
+	  }
+	`
+	var payload map[string]any
+	err := json.Unmarshal([]byte(jsonPayload), &payload)
+	require.NoError(t, err)
+
+	mp := NewClient(117, "token", "auth-secret")
+	event, err := mp.NewEventFromJson(payload)
+	require.NoError(t, err)
+
+	require.Equal(t, "test_event", event.Name)
+	require.Equal(t, "value", event.Properties["key"])
+}
