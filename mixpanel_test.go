@@ -28,3 +28,9 @@ func TestMixpanelOptions(t *testing.T) {
 		require.True(t, mp.debugHttp)
 	})
 }
+
+func TestMixpanelNewEvent(t *testing.T) {
+	mp := NewClient(0, "", "")
+	event := mp.NewEvent("some event", EmptyDistinctID, nil)
+	require.NotNil(t, event.Properties)
+}
