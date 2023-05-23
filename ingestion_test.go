@@ -7,15 +7,62 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/require"
 )
+
+func TestEvent(t *testing.T) {
+	t.Run("does not panic with nil properties", func(t *testing.T) {
+		mp := NewClient("")
+		event := mp.NewEvent("some event", EmptyDistinctID, nil)
+		require.NotNil(t, event.Properties)
+	})
+
+	t.Run("event add times correctly", func(t *testing.T) {
+		nowTime := time.Now()
+
+		mp := NewClient("")
+		event := mp.NewEvent("some event", EmptyDistinctID, nil)
+		event.AddTime(nowTime)
+
+		require.Equal(t, nowTime.UnixMilli(), event.Properties[propertyTime])
+	})
+
+	t.Run("insert id set correctly", func(t *testing.T) {
+		mp := NewClient("")
+		event := mp.NewEvent("some event", EmptyDistinctID, nil)
+		event.AddInsertID("insert-id")
+
+		require.Equal(t, "insert-id", event.Properties[propertyInsertID])
+	})
+
+	t.Run("ip sets correctly", func(t *testing.T) {
+		ip := net.ParseIP("10.1.1.117")
+		require.NotNil(t, ip)
+
+		mp := NewClient("")
+		event := mp.NewEvent("some event", EmptyDistinctID, nil)
+		event.AddIP(ip)
+
+		require.Equal(t, ip.String(), event.Properties[propertyIP])
+	})
+
+	t.Run("does not panic if ip is nill", func(t *testing.T) {
+		mp := NewClient("")
+		event := mp.NewEvent("some event", EmptyDistinctID, nil)
+		event.AddIP(nil)
+
+		require.NotContains(t, event.Properties, propertyIP)
+	})
+}
 
 func TestTrack(t *testing.T) {
 	t.Run("track 1 event", func(t *testing.T) {
@@ -179,7 +226,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient("token", ProjectID(117), SetServiceAccount(userName, secret))
+		mp := NewClient("token", ProjectID(117), ServiceAccount(userName, secret))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
 		require.NoError(t, err)
 	})

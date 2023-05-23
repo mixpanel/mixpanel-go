@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -156,25 +155,68 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	}
 }
 
-// PeopleOptions
-type peopleOptions struct {
-	IP        string  `json:"$ip,omitempty"`
-	Latitude  float64 `json:"$latitude,omitempty"`
-	Longitude float64 `json:"$longitude,omitempty"`
+type PeopleProperties map[string]any
+
+func NewPeopleProperties(properties map[string]any) PeopleProperties {
+	if properties == nil {
+		return map[string]any{}
+	}
+	return properties
 }
 
-type PeopleOptions func(p *peopleOptions)
+type PeopleOptions func(map[string]any)
 
-func SetPeopleIP(ip net.IP) PeopleOptions {
-	return func(p *peopleOptions) {
-		p.IP = ip.String()
+func SetEmail(email string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$email"] = email
 	}
 }
 
-func SetPeopleLatLong(lat, long float64) PeopleOptions {
-	return func(p *peopleOptions) {
-		p.Latitude = lat
-		p.Longitude = long
+func SetPhone(phone string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$phone"] = phone
+	}
+}
+
+func SetFirstName(firstName string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$first_name"] = firstName
+	}
+}
+
+func SetLastName(lastName string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$last_name"] = lastName
+	}
+}
+
+func SetName(name string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$name"] = name
+	}
+}
+
+func SetAvatar(avatar string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$avatar"] = avatar
+	}
+}
+
+func SetCreated(created string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$created"] = created
+	}
+}
+
+func SetCity(city string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$city"] = city
+	}
+}
+
+func SetRegion(region string) PeopleOptions {
+	return func(p map[string]any) {
+		p["$region"] = region
 	}
 }
 
@@ -182,20 +224,18 @@ type peopleSetPayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	Set        map[string]any `json:"$set"`
-	*peopleOptions
 }
 
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
 func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
-	payload := peopleSetPayload{
-		Token:         m.token,
-		DistinctID:    distinctID,
-		peopleOptions: &peopleOptions{},
-		Set:           properties,
-	}
 	for _, o := range options {
-		o(payload.peopleOptions)
+		o(properties)
+	}
+	payload := peopleSetPayload{
+		Token:      m.token,
+		DistinctID: distinctID,
+		Set:        properties,
 	}
 	return m.doPeopleRequest(ctx, []peopleSetPayload{payload}, peopleSetURL)
 }
@@ -204,20 +244,19 @@ type peopleSetOncePayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	SetOnce    map[string]any `json:"$set_once"`
-	*peopleOptions
 }
 
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
 func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
-	payload := peopleSetOncePayload{
-		Token:         m.token,
-		DistinctID:    distinctID,
-		SetOnce:       properties,
-		peopleOptions: &peopleOptions{},
-	}
 	for _, o := range options {
-		o(payload.peopleOptions)
+		o(properties)
+	}
+
+	payload := peopleSetOncePayload{
+		Token:      m.token,
+		DistinctID: distinctID,
+		SetOnce:    properties,
 	}
 	return m.doPeopleRequest(ctx, []peopleSetOncePayload{payload}, peopleSetOnceURL)
 }
