@@ -110,6 +110,18 @@ type Mixpanel struct {
 
 type Options func(mixpanel *Mixpanel)
 
+func ProjectID(projectID int) Options {
+	return func(mixpanel *Mixpanel) {
+		mixpanel.projectID = projectID
+	}
+}
+
+func ApiSecret(apiSecret string) Options {
+	return func(mixpanel *Mixpanel) {
+		mixpanel.apiSecret = apiSecret
+	}
+}
+
 // HttpClient will replace the http.DefaultClient with the provided http.Client
 func HttpClient(client *http.Client) Options {
 	return func(mixpanel *Mixpanel) {
@@ -161,14 +173,12 @@ func DebugHttpCalls() Options {
 }
 
 // NewClient create a new mixpanel client
-func NewClient(projectID int, token, secret string, options ...Options) *Mixpanel {
+func NewClient(token string, options ...Options) *Mixpanel {
 	mp := &Mixpanel{
-		projectID:    projectID,
 		client:       http.DefaultClient,
 		apiEndpoint:  usEndpoint,
 		dataEndpoint: usDataEndpoint,
 		token:        token,
-		apiSecret:    secret,
 	}
 
 	for _, o := range options {
