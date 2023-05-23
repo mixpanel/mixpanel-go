@@ -24,7 +24,7 @@ func TestTrack(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
 
-		mp := NewClient(0, "token", "api-secret")
+		mp := NewClient("token")
 		events := []*Event{
 			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
 		}
@@ -55,7 +55,7 @@ func TestTrack(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
 
-		mp := NewClient(0, "token", "api-secret")
+		mp := NewClient("token")
 		events := []*Event{
 			mp.NewEvent("sample_event_1", EmptyDistinctID, map[string]any{}),
 			mp.NewEvent("sample_event_2", EmptyDistinctID, map[string]any{}),
@@ -90,7 +90,7 @@ func TestTrack(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
 
-		mp := NewClient(0, "token", "api-secret")
+		mp := NewClient("token")
 
 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
 			body := `
@@ -150,12 +150,12 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", apiSecret)
+		mp := NewClient("token", ProjectID(117), ApiSecret(apiSecret))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
 		require.NoError(t, err)
 	})
 
-	t.Run("api-service-account-aut", func(t *testing.T) {
+	t.Run("api-service-account-auth", func(t *testing.T) {
 		userName := "username"
 		secret := "secret"
 
@@ -179,7 +179,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", "api-secret", SetServiceAccount(userName, secret))
+		mp := NewClient("token", ProjectID(117), SetServiceAccount(userName, secret))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
 		require.NoError(t, err)
 	})
@@ -212,7 +212,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", "auth-secret")
+		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
 			Compression: None,
 		})
@@ -250,7 +250,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", "auth-secret")
+		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
 			Compression: Gzip,
 		})
@@ -279,7 +279,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", "auth-secret")
+		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
 			Strict: true,
 		})
@@ -308,7 +308,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", "auth-secret")
+		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
 			Strict: false,
 		})
@@ -337,7 +337,7 @@ func TestImport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient(117, "token", "auth-secret")
+		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
 			Strict: false,
 		})
@@ -359,7 +359,7 @@ func TestNewEventFromJson(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonPayload), &payload)
 	require.NoError(t, err)
 
-	mp := NewClient(117, "token", "auth-secret")
+	mp := NewClient("token")
 	event, err := mp.NewEventFromJson(payload)
 	require.NoError(t, err)
 
