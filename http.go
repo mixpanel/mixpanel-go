@@ -169,7 +169,9 @@ func (m *Mixpanel) doRequest(
 	debugHttpCall.Url = request.URL.String()
 	debugHttpCall.Query = request.URL.Query()
 	debugHttpCall.Headers = request.Header
-	m.debugHttpCall.writeDebug(debugHttpCall)
+	if err := m.debugHttpCall.writeDebug(debugHttpCall); err != nil {
+		return nil, fmt.Errorf("failed to write debug_http call: %w", err)
+	}
 
 	return m.client.Do(request)
 }
