@@ -64,6 +64,62 @@ func TestEvent(t *testing.T) {
 	})
 }
 
+func TestNewEventFromJson(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		jsonPayload := `
+		{
+			"properties": {
+			  "key": "value"
+			},
+			"event": "test_event"
+		  }
+		`
+		var payload map[string]any
+		err := json.Unmarshal([]byte(jsonPayload), &payload)
+		require.NoError(t, err)
+
+		mp := NewClient("token")
+		event, err := mp.NewEventFromJson(payload)
+		require.NoError(t, err)
+
+		require.Equal(t, "test_event", event.Name)
+		require.Equal(t, "value", event.Properties["key"])
+	})
+
+	t.Run("event name is missing", func(t *testing.T) {
+		jsonPayload := `
+		{
+			"properties": {
+			  "key": "value"
+			}
+		  }
+		`
+		var payload map[string]any
+		err := json.Unmarshal([]byte(jsonPayload), &payload)
+		require.NoError(t, err)
+
+		mp := NewClient("token")
+		_, err = mp.NewEventFromJson(payload)
+		require.Error(t, err)
+	})
+
+	t.Run("event name is missing", func(t *testing.T) {
+		jsonPayload := `
+		{
+			"properties": "not a map",
+			"event": "test_event"
+		}
+		`
+		var payload map[string]any
+		err := json.Unmarshal([]byte(jsonPayload), &payload)
+		require.NoError(t, err)
+
+		mp := NewClient("token")
+		_, err = mp.NewEventFromJson(payload)
+		require.Error(t, err)
+	})
+}
+
 func TestTrack(t *testing.T) {
 	t.Run("track 1 event", func(t *testing.T) {
 		ctx := context.Background()
@@ -391,25 +447,4 @@ func TestImport(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-}
-
-func TestNewEventFromJson(t *testing.T) {
-	jsonPayload := `
-	{
-		"properties": {
-		  "key": "value"
-		},
-		"event": "test_event"
-	  }
-	`
-	var payload map[string]any
-	err := json.Unmarshal([]byte(jsonPayload), &payload)
-	require.NoError(t, err)
-
-	mp := NewClient("token")
-	event, err := mp.NewEventFromJson(payload)
-	require.NoError(t, err)
-
-	require.Equal(t, "test_event", event.Name)
-	require.Equal(t, "value", event.Properties["key"])
 }
