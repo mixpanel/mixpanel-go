@@ -89,7 +89,7 @@ type MpApi interface {
 	Ingestion
 }
 
-type ServiceAccount struct {
+type serviceAccount struct {
 	Username string
 	Secret   string
 }
@@ -103,7 +103,7 @@ type Mixpanel struct {
 	token     string
 	apiSecret string
 
-	serviceAccount *ServiceAccount
+	serviceAccount *serviceAccount
 
 	debugHttp bool
 }
@@ -154,11 +154,11 @@ func ProxyDataLocation(proxy string) Options {
 	}
 }
 
-// SetServiceAccount add a service account to the mixpanel client
+// ServiceAccount add a service account to the mixpanel client
 // https://developer.mixpanel.com/reference/service-accounts-api
-func SetServiceAccount(username, secret string) Options {
+func ServiceAccount(username, secret string) Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.serviceAccount = &ServiceAccount{
+		mixpanel.serviceAccount = &serviceAccount{
 			Username: username,
 			Secret:   secret,
 		}
@@ -203,7 +203,6 @@ func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[strin
 		properties = make(map[string]any)
 	}
 
-	// Todo: deep copy map
 	properties[propertyToken] = m.token
 	properties[propertyDistinctID] = distinctID
 	properties[propertyMpLib] = goLib
@@ -245,7 +244,10 @@ func (e *Event) AddInsertID(insertID string) {
 // AddIP if you supply a property ip with an IP address
 // Mixpanel will automatically do a GeoIP lookup and replace the ip property with geographic properties (City, Country, Region). These properties can be used in our UI to segment events geographically.
 // https://developer.mixpanel.com/reference/import-events#geoip-enrichment
-func (e *Event) AddIP(ip *net.IP) {
+func (e *Event) AddIP(ip net.IP) {
+	if ip == nil {
+		return
+	}
 	e.Properties[propertyIP] = ip.String()
 }
 

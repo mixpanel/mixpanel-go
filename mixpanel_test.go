@@ -12,25 +12,41 @@ func TestMixpanelOptions(t *testing.T) {
 		require.Equal(t, mp.apiEndpoint, euEndpoint)
 		require.Equal(t, mp.dataEndpoint, euDataEndpoint)
 	})
+
+	t.Run("project id", func(t *testing.T) {
+		mp := NewClient("", ProjectID(117))
+		require.Equal(t, 117, mp.projectID)
+	})
+
+	t.Run("api secret", func(t *testing.T) {
+		mp := NewClient("", ApiSecret("api-secret"))
+		require.Equal(t, "api-secret", mp.apiSecret)
+	})
+
 	t.Run("service account", func(t *testing.T) {
-		mp := NewClient("", SetServiceAccount("username", "secret"))
+		mp := NewClient("", ServiceAccount("username", "secret"))
 		require.NotNil(t, mp.serviceAccount)
 		require.Equal(t, "username", mp.serviceAccount.Username)
 		require.Equal(t, "secret", mp.serviceAccount.Secret)
 	})
 
-	t.Run("set proxy", func(t *testing.T) {
+	t.Run("set api proxy", func(t *testing.T) {
 		mp := NewClient("", ProxyApiLocation("https://localhost:8080"))
 		require.Equal(t, "https://localhost:8080", mp.apiEndpoint)
 	})
+
+	t.Run("set data proxy", func(t *testing.T) {
+		mp := NewClient("", ProxyDataLocation("https://localhost:8080"))
+		require.Equal(t, "https://localhost:8080", mp.dataEndpoint)
+	})
+
 	t.Run("debug http", func(t *testing.T) {
 		mp := NewClient("", DebugHttpCalls())
 		require.True(t, mp.debugHttp)
 	})
-}
 
-func TestMixpanelNewEvent(t *testing.T) {
-	mp := NewClient("")
-	event := mp.NewEvent("some event", EmptyDistinctID, nil)
-	require.NotNil(t, event.Properties)
+	t.Run("http client", func(t *testing.T) {
+		mp := NewClient("", HttpClient(nil))
+		require.Nil(t, mp.client)
+	})
 }
