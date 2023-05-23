@@ -3,6 +3,7 @@ package mixpanel
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -87,6 +88,8 @@ var _ Identity = (*Mixpanel)(nil)
 // https://developer.mixpanel.com/reference/overview
 type MpApi interface {
 	Ingestion
+	Export
+	Identity
 }
 
 type serviceAccount struct {
@@ -104,8 +107,7 @@ type Mixpanel struct {
 	apiSecret string
 
 	serviceAccount *serviceAccount
-
-	debugHttp bool
+	debugHttpCall  *debugHttpCalls
 }
 
 type Options func(mixpanel *Mixpanel)
@@ -165,20 +167,23 @@ func ServiceAccount(username, secret string) Options {
 	}
 }
 
-// DebugHttpCalls prints payload information and url information for debugging purposes
-func DebugHttpCalls() Options {
+// DebugHttpCalls streams payload information and url information for debugging purposes
+func DebugHttpCalls(writer io.Writer) Options {
 	return func(mixpanel *Mixpanel) {
-		mixpanel.debugHttp = true
+		mixpanel.debugHttpCall = &debugHttpCalls{
+			writer: writer,
+		}
 	}
 }
 
 // NewClient create a new mixpanel client
 func NewClient(token string, options ...Options) *Mixpanel {
 	mp := &Mixpanel{
-		client:       http.DefaultClient,
-		apiEndpoint:  usEndpoint,
-		dataEndpoint: usDataEndpoint,
-		token:        token,
+		client:        http.DefaultClient,
+		apiEndpoint:   usEndpoint,
+		dataEndpoint:  usDataEndpoint,
+		token:         token,
+		debugHttpCall: &debugHttpCalls{},
 	}
 
 	for _, o := range options {
@@ -249,37 +254,4 @@ func (e *Event) AddIP(ip net.IP) {
 		return
 	}
 	e.Properties[propertyIP] = ip.String()
-}
-
-type IdentityEvent struct {
-	*Event
-}
-
-func (m *Mixpanel) NewIdentityEvent(distinctID string, properties map[string]any, identifiedId, anonId string) *IdentityEvent {
-	event := m.NewEvent("$identify", distinctID, properties)
-	i := &IdentityEvent{
-		Event: event,
-	}
-	i.SetIdentifiedId(identifiedId)
-	i.SetAnonId(anonId)
-
-	return i
-}
-
-func (i *IdentityEvent) IdentifiedId() any {
-	return i.Properties["$identified_id"]
-}
-
-// A distinct_id to merge with the $anon_id.
-func (i *IdentityEvent) SetIdentifiedId(id string) {
-	i.Properties["$identified_id"] = id
-}
-
-// A distinct_id to merge with the $identified_id. The $anon_id must be UUID v4 format and not already merged to an $identified_id.
-func (i *IdentityEvent) SetAnonId(id string) {
-	i.Properties["$anon_id"] = id
-}
-
-func (i *IdentityEvent) AnonId(id string) {
-	i.Properties["$anon_id"] = id
 }

@@ -1,6 +1,7 @@
 package mixpanel
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,8 +42,8 @@ func TestMixpanelOptions(t *testing.T) {
 	})
 
 	t.Run("debug http", func(t *testing.T) {
-		mp := NewClient("", DebugHttpCalls())
-		require.True(t, mp.debugHttp)
+		mp := NewClient("", DebugHttpCalls(os.Stdout))
+		require.NotNil(t, mp.debugHttpCall)
 	})
 
 	t.Run("http client", func(t *testing.T) {

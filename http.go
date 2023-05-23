@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -99,6 +100,27 @@ func acceptPlainText() httpOptions {
 	}
 }
 
+type debugHttpCalls struct {
+	writer io.Writer
+}
+
+func (d *debugHttpCalls) writeDebug(call debugHttpCall) error {
+	if d.writer == nil {
+		return nil
+	}
+
+	debugPayload, err := json.MarshalIndent(call, "", "\t")
+	if err != nil {
+		return fmt.Errorf("failed to marshal debug_http payload %w", err)
+	}
+
+	_, err = d.writer.Write(debugPayload)
+	if err != nil {
+		return fmt.Errorf("failed to write debug_http payload %w", err)
+	}
+	return nil
+}
+
 type debugHttpCall struct {
 	RawPayload string
 	Url        string
@@ -147,15 +169,7 @@ func (m *Mixpanel) doRequest(
 	debugHttpCall.Url = request.URL.String()
 	debugHttpCall.Query = request.URL.Query()
 	debugHttpCall.Headers = request.Header
-
-	if m.debugHttp {
-		debugPayload, err := json.MarshalIndent(debugHttpCall, "", "\t")
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal debug_http payload %w", err)
-		}
-		fmt.Printf("Debug Payload:\n %s\n", string(debugPayload))
-
-	}
+	m.debugHttpCall.writeDebug(debugHttpCall)
 
 	return m.client.Do(request)
 }
