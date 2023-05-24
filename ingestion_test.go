@@ -817,3 +817,40 @@ func TestPeopleSetOnce(t *testing.T) {
 		}))
 	})
 }
+
+func TestPeoplePeopleIncrement(t *testing.T) {
+	t.Run("can increment 1 property", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleIncrementUrl), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			peopleSet := postBody[0]
+			require.Equal(t, "some-id", peopleSet["$distinct_id"])
+
+			set, ok := peopleSet["$add"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, float64(1), set["some-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleIncrement(ctx, "some-id", map[string]int{
+			"some-key": 1,
+		}))
+	})
+}
