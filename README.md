@@ -5,8 +5,10 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/mixpanel/mixpanel-go)](https://goreportcard.com/report/github.com/mixpanel/mixpanel-go)
 [![codecov](https://codecov.io/gh/mixpanel/mixpanel-go/branch/main/graph/badge.svg?token=SRZPEYRHEU)](https://codecov.io/gh/mixpanel/mixpanel-go)
 
+WebSite docs: https://docs.mixpanel.com/tracking/reference/go
+
 ## Getting Started
 
 ```go
-    	mp := NewClient("<PROJECT_TOKEN"")
+ mp := NewClient("<PROJECT_TOKEN"")
 ```
