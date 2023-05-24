@@ -56,7 +56,7 @@ type Ingestion interface {
 	PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error
 	PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error
 	PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error
-	PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]string) error
+	PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error
 	PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error
 	PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error
 

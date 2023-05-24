@@ -326,14 +326,14 @@ func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID stri
 }
 
 type peopleListRemovePayload struct {
-	Token      string            `json:"$token"`
-	DistinctID string            `json:"$distinct_id"`
-	Remove     map[string]string `json:"$remove"`
+	Token      string         `json:"$token"`
+	DistinctID string         `json:"$distinct_id"`
+	Remove     map[string]any `json:"$remove"`
 }
 
 // PeopleRemoveListProperty calls the User Remove from List Property API
 // https://developer.mixpanel.com/reference/profile-remove-from-list-property
-func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]string) error {
+func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
 	payload := []peopleListRemovePayload{
 		{
 			Token:      m.token,
