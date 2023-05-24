@@ -10,5 +10,5 @@ WebSite docs: https://docs.mixpanel.com/tracking/reference/go
 ## Getting Started
 
 ```go
- mp := NewClient("<PROJECT_TOKEN>")
+ mp := mixpanel.NewClient("<PROJECT_TOKEN>")
 ```
