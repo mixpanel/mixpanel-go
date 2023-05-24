@@ -10,6 +10,11 @@ import (
 )
 
 const (
+	MaxTrackEvents  = 50
+	MaxImportEvents = 2000
+)
+
+const (
 	trackURL  = "/track"
 	importURL = "/import"
 
@@ -42,6 +47,10 @@ const (
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
 func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
+	if len(events) > MaxTrackEvents {
+		return fmt.Errorf("max track events is %d", MaxTrackEvents)
+	}
+
 	query := url.Values{}
 	query.Add("verbose", "1")
 
@@ -71,7 +80,7 @@ type ImportFailedValidationError struct {
 
 type ImportFailedRecords struct {
 	Index    int    `json:"index"`
-	InsertID int    `json:"insert_id"`
+	InsertID string `json:"insert_id"`
 	Field    string `json:"field"`
 	Message  string `json:"message"`
 }
@@ -96,6 +105,10 @@ type ImportSuccess struct {
 	Status             interface{} `json:"status"`
 }
 
+type ImportRateLimitError struct {
+	ImportGenericError
+}
+
 type ImportGenericError struct {
 	Code     int         `json:"code"`
 	ApiError string      `json:"error"`
@@ -109,6 +122,10 @@ func (e ImportGenericError) Error() string {
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
 func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
+	if len(events) > MaxImportEvents {
+		return nil, fmt.Errorf("max import events is %d", MaxImportEvents)
+	}
+
 	values := url.Values{}
 	if options.Strict {
 		values.Add("strict", "1")
@@ -144,8 +161,14 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 			return nil, fmt.Errorf("failed to json decode response body: %w", err)
 		}
 		return nil, g
-	case http.StatusUnauthorized, http.StatusRequestEntityTooLarge, http.StatusTooManyRequests:
+	case http.StatusUnauthorized, http.StatusRequestEntityTooLarge:
 		var g ImportGenericError
+		if err := json.NewDecoder(httpResponse.Body).Decode(&g); err != nil {
+			return nil, fmt.Errorf("failed to json decode response body: %w", err)
+		}
+		return nil, g
+	case http.StatusTooManyRequests:
+		var g ImportRateLimitError
 		if err := json.NewDecoder(httpResponse.Body).Decode(&g); err != nil {
 			return nil, fmt.Errorf("failed to json decode response body: %w", err)
 		}
@@ -155,70 +178,21 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	}
 }
 
-type PeopleProperties map[string]any
+const (
+	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
 
-func NewPeopleProperties(properties map[string]any) PeopleProperties {
-	if properties == nil {
-		return map[string]any{}
-	}
-	return properties
-}
-
-type PeopleOptions func(map[string]any)
-
-func SetEmail(email string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$email"] = email
-	}
-}
-
-func SetPhone(phone string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$phone"] = phone
-	}
-}
-
-func SetFirstName(firstName string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$first_name"] = firstName
-	}
-}
-
-func SetLastName(lastName string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$last_name"] = lastName
-	}
-}
-
-func SetName(name string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$name"] = name
-	}
-}
-
-func SetAvatar(avatar string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$avatar"] = avatar
-	}
-}
-
-func SetCreated(created string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$created"] = created
-	}
-}
-
-func SetCity(city string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$city"] = city
-	}
-}
-
-func SetRegion(region string) PeopleOptions {
-	return func(p map[string]any) {
-		p["$region"] = region
-	}
-}
+	UserEmailProperty       = "$email"
+	UserPhoneProperty       = "$phone"
+	UserFirstNameProperty   = "$first_name"
+	UserLastNameProperty    = "$last_name"
+	UserAvatarProperty      = "$avatar"
+	UserCreatedProperty     = "$created"
+	UserCityProperty        = "$city"
+	UserRegionProperty      = "$region"
+	UserCountryCodeProperty = "$country_code"
+	UserTimezoneProperty    = "$timezone"
+	UserBucketProperty      = "$bucket"
+)
 
 type peopleSetPayload struct {
 	Token      string         `json:"$token"`
@@ -228,10 +202,7 @@ type peopleSetPayload struct {
 
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
-func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
-	for _, o := range options {
-		o(properties)
-	}
+func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error {
 	payload := peopleSetPayload{
 		Token:      m.token,
 		DistinctID: distinctID,
@@ -248,11 +219,7 @@ type peopleSetOncePayload struct {
 
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any, options ...PeopleOptions) error {
-	for _, o := range options {
-		o(properties)
-	}
-
+func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
 	payload := peopleSetOncePayload{
 		Token:      m.token,
 		DistinctID: distinctID,

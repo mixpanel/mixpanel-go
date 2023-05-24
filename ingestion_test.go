@@ -65,7 +65,7 @@ func TestEvent(t *testing.T) {
 }
 
 func TestNewEventFromJson(t *testing.T) {
-	t.Run("happy path", func(t *testing.T) {
+	t.Run("valid json", func(t *testing.T) {
 		jsonPayload := `
 		{
 			"properties": {
@@ -187,6 +187,18 @@ func TestTrack(t *testing.T) {
 		require.NoError(t, mp.Track(ctx, events))
 	})
 
+	t.Run("don't send more events then allowed", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token")
+		var events []*Event
+		for i := 0; i < MaxTrackEvents+1; i++ {
+			events = append(events, mp.NewEvent("some event", EmptyDistinctID, map[string]any{}))
+		}
+
+		err := mp.Track(ctx, events)
+		require.Error(t, err)
+	})
+
 	t.Run("Error Occurred", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -248,7 +260,7 @@ func TestImport(t *testing.T) {
 			}
 			`
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
@@ -277,7 +289,7 @@ func TestImport(t *testing.T) {
 			}
 			`
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
@@ -310,7 +322,7 @@ func TestImport(t *testing.T) {
 			}
 			`
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
@@ -348,7 +360,7 @@ func TestImport(t *testing.T) {
 			}
 			`
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
@@ -377,7 +389,7 @@ func TestImport(t *testing.T) {
 			}
 			`
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
@@ -406,7 +418,7 @@ func TestImport(t *testing.T) {
 			}
 			`
 			return &http.Response{
-				StatusCode: 200,
+				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
@@ -439,12 +451,146 @@ func TestImport(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader(body)),
 			}, nil
 		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Strict: false,
-		})
-		require.NoError(t, err)
 	})
 
+	t.Run("bad request", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			body := `
+			{
+				"code": 400,
+				"status": "Bad Request",
+				"num_records_imported": 1,
+				"error": "some data points in the request failed validation",
+				"failed_records": [
+					{
+						"index": 1,
+						"field": "event",
+						"insert_id": "some-insert-id",
+						"message": "'event' must not be missing or blank"
+					}
+				]
+			}
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		require.ErrorAs(t, err, &ImportFailedValidationError{})
+	})
+
+	t.Run("unauthorized", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			body := `
+			{
+			  "code": 401,
+			  "error":"Unauthorized",
+			  "status": 0
+			}
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		require.ErrorAs(t, err, &ImportGenericError{})
+	})
+
+	t.Run("request entity too large", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			body := `
+			{
+			  "code": 429,
+			  "error":"to large",
+			  "status": 0
+			}
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusRequestEntityTooLarge,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		require.ErrorAs(t, err, &ImportGenericError{})
+	})
+
+	t.Run("to many requests", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			body := `
+			{
+			  "code": 429,
+			  "error":"Project exceeded rate limits. Please retry the request with exponential backoff.",
+			  "status": 0
+			}
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		require.ErrorAs(t, err, &ImportRateLimitError{})
+	})
+
+	t.Run("unknown status code", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			body := `
+			{
+			  "code": 418,
+			  "error":"I am a teapot",
+			  "status": 0
+			}
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusTeapot,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		require.Error(t, err)
+	})
+
+	t.Run("don't send more events then allowed", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token")
+		var events []*Event
+		for i := 0; i < MaxImportEvents+1; i++ {
+			events = append(events, mp.NewEvent("some event", EmptyDistinctID, map[string]any{}))
+		}
+
+		_, err := mp.Import(ctx, events, ImportOptionsRecommend)
+		require.Error(t, err)
+	})
 }
