@@ -184,19 +184,19 @@ type PeopleReveredProperties string
 const (
 	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
 
-	UserEmailProperty           PeopleReveredProperties = "$email"
-	UserPhoneProperty           PeopleReveredProperties = "$phone"
-	UserFirstNameProperty       PeopleReveredProperties = "$first_name"
-	UserLastNameProperty        PeopleReveredProperties = "$last_name"
-	UserNameProperty            PeopleReveredProperties = "$name"
-	UserAvatarProperty          PeopleReveredProperties = "$avatar"
-	UserCreatedProperty         PeopleReveredProperties = "$created"
-	UserCityProperty            PeopleReveredProperties = "$city"
-	UserRegionProperty          PeopleReveredProperties = "$region"
-	UserCountryCodeProperty     PeopleReveredProperties = "$country_code"
-	UserTimezoneProperty        PeopleReveredProperties = "$timezone"
-	UserBucketProperty          PeopleReveredProperties = "$bucket"
-	UserGeolocationByIpProperty PeopleReveredProperties = "$ip"
+	PeopleEmailProperty           PeopleReveredProperties = "$email"
+	PeoplePhoneProperty           PeopleReveredProperties = "$phone"
+	PeopleFirstNameProperty       PeopleReveredProperties = "$first_name"
+	PeopleLastNameProperty        PeopleReveredProperties = "$last_name"
+	PeopleNameProperty            PeopleReveredProperties = "$name"
+	PeopleAvatarProperty          PeopleReveredProperties = "$avatar"
+	PeopleCreatedProperty         PeopleReveredProperties = "$created"
+	PeopleCityProperty            PeopleReveredProperties = "$city"
+	PeopleRegionProperty          PeopleReveredProperties = "$region"
+	PeopleCountryCodeProperty     PeopleReveredProperties = "$country_code"
+	PeopleTimezoneProperty        PeopleReveredProperties = "$timezone"
+	PeopleBucketProperty          PeopleReveredProperties = "$bucket"
+	PeopleGeolocationByIpProperty PeopleReveredProperties = "$ip"
 )
 
 type peopleSetPayload struct {
@@ -231,7 +231,7 @@ func (p *PeopleProperties) SetIp(ip net.IP) {
 		return
 	}
 
-	p.Properties[string(UserGeolocationByIpProperty)] = ip.String()
+	p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
 }
 
 // PeopleSet calls the User Set Property API
