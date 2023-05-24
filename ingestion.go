@@ -185,6 +185,7 @@ const (
 	UserPhoneProperty           = "$phone"
 	UserFirstNameProperty       = "$first_name"
 	UserLastNameProperty        = "$last_name"
+	UserNameProperty            = "$name"
 	UserAvatarProperty          = "$avatar"
 	UserCreatedProperty         = "$created"
 	UserCityProperty            = "$city"

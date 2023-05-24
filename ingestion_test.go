@@ -121,7 +121,7 @@ func TestNewEventFromJson(t *testing.T) {
 }
 
 func TestTrack(t *testing.T) {
-	t.Run("track 1 event", func(t *testing.T) {
+	t.Run("can track an event", func(t *testing.T) {
 		ctx := context.Background()
 
 		httpmock.Activate()
@@ -152,7 +152,40 @@ func TestTrack(t *testing.T) {
 
 		require.NoError(t, mp.Track(ctx, events))
 	})
-	t.Run("track multiple event", func(t *testing.T) {
+
+	t.Run("can track an event to the eu", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		mp := NewClient("token", EuResidency())
+		events := []*Event{
+			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
+		}
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", euEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
+			var r []*Event
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
+			require.Len(t, r, 1)
+			require.ElementsMatch(t, events, r)
+
+			body := `
+			{
+			  "error": "",
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		require.NoError(t, mp.Track(ctx, events))
+	})
+
+	t.Run("can track multiple event", func(t *testing.T) {
 		ctx := context.Background()
 
 		httpmock.Activate()
@@ -187,7 +220,7 @@ func TestTrack(t *testing.T) {
 		require.NoError(t, mp.Track(ctx, events))
 	})
 
-	t.Run("don't send more events then allowed", func(t *testing.T) {
+	t.Run("return error # of events are more than track allows", func(t *testing.T) {
 		ctx := context.Background()
 		mp := NewClient("token")
 		var events []*Event
@@ -199,7 +232,7 @@ func TestTrack(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("Error Occurred", func(t *testing.T) {
+	t.Run("track call failed and return error", func(t *testing.T) {
 		ctx := context.Background()
 
 		httpmock.Activate()
@@ -644,5 +677,42 @@ func TestImport(t *testing.T) {
 
 		_, err := mp.Import(ctx, events, ImportOptionsRecommend)
 		require.Error(t, err)
+	})
+}
+
+func TestPeopleSet(t *testing.T) {
+	t.Run("can set one person", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			peopleSet := postBody[0]
+			require.Equal(t, "some-id", peopleSet["$distinct_id"])
+
+			set, ok := peopleSet["$set"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "some-value", set["some-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleSet(ctx, "some-id", map[string]any{
+			"some-key": "some-value",
+		}))
 	})
 }
