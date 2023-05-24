@@ -711,8 +711,81 @@ func TestPeopleSet(t *testing.T) {
 		})
 
 		mp := NewClient("token")
-		require.NoError(t, mp.PeopleSet(ctx, "some-id", map[string]any{
-			"some-key": "some-value",
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
+			NewPeopleProperties("some-id", map[string]any{
+				"some-key": "some-value",
+			}),
+		}))
+	})
+
+	t.Run("can set multiple person", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+			require.Len(t, postBody, 2)
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
+			NewPeopleProperties("some-id-1", map[string]any{
+				"some-key": "some-value-1",
+			}),
+			NewPeopleProperties("some-id-2", map[string]any{
+				"some-key": "some-value-2",
+			}),
+		}))
+	})
+}
+
+func TestPeopleSetOnce(t *testing.T) {
+	t.Run("can set one person", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetOnceURL), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			peopleSet := postBody[0]
+			require.Equal(t, "some-id", peopleSet["$distinct_id"])
+
+			set, ok := peopleSet["$set"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "some-value", set["some-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{
+			NewPeopleProperties("some-id", map[string]any{
+				"some-key": "some-value",
+			}),
 		}))
 	})
 }

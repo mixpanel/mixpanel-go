@@ -51,8 +51,8 @@ type Ingestion interface {
 	Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error)
 
 	// People
-	PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error
-	PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error
+	PeopleSet(ctx context.Context, people []*PeopleProperties) error
+	PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error
 	PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error
 	PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error
 	PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]string) error
