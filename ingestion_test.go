@@ -831,10 +831,10 @@ func TestPeoplePeopleIncrement(t *testing.T) {
 
 			require.Len(t, postBody, 1)
 
-			peopleSet := postBody[0]
-			require.Equal(t, "some-id", peopleSet["$distinct_id"])
+			peopleIncr := postBody[0]
+			require.Equal(t, "some-id", peopleIncr["$distinct_id"])
 
-			set, ok := peopleSet["$add"].(map[string]any)
+			set, ok := peopleIncr["$add"].(map[string]any)
 			require.True(t, ok)
 			require.Equal(t, float64(1), set["some-key"])
 
@@ -851,6 +851,43 @@ func TestPeoplePeopleIncrement(t *testing.T) {
 		mp := NewClient("token")
 		require.NoError(t, mp.PeopleIncrement(ctx, "some-id", map[string]int{
 			"some-key": 1,
+		}))
+	})
+}
+
+func TestPeopleAppendListProperty(t *testing.T) {
+	t.Run("can add to list", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleAppendToListUrl), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			peopleAppend := postBody[0]
+			require.Equal(t, "some-id", peopleAppend["$distinct_id"])
+
+			data, ok := peopleAppend["$append"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "some-value", data["list-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleAppendListProperty(ctx, "some-id", map[string]any{
+			"list-key": "some-value",
 		}))
 	})
 }
