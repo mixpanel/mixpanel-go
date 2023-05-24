@@ -891,3 +891,40 @@ func TestPeopleAppendListProperty(t *testing.T) {
 		}))
 	})
 }
+
+func TestPeopleRemoveListProperty(t *testing.T) {
+	t.Run("can remove from list", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleRemoveFromListUrl), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			peopleAppend := postBody[0]
+			require.Equal(t, "some-id", peopleAppend["$distinct_id"])
+
+			data, ok := peopleAppend["$remove"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "some-value", data["list-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleRemoveListProperty(ctx, "some-id", map[string]any{
+			"list-key": "some-value",
+		}))
+	})
+}
