@@ -17,12 +17,18 @@ func PeopleSet() error {
 		mixpanel.ServiceAccount("user_name", "secret"),
 	)
 
-	if err := mp.PeopleSet(ctx, "Spartan-117", map[string]any{
-		mixpanel.UserFirstNameProperty: "John",
-		mixpanel.UserLastNameProperty:  "",
-		mixpanel.UserNameProperty:      "Spartan 117",
-		"ai":                           "Cortana",
-	}); err != nil {
+	// Can use the SetReversedProperty or make the reserved property yourself
+	spartan117 := mixpanel.NewPeopleProperties("Spartan-117", map[string]any{
+		string(mixpanel.UserFirstNameProperty): "John",
+		"ai":                                   "Cortana",
+	})
+	spartan117.SetReservedProperty(mixpanel.UserNameProperty, "Master Chief")
+
+	if err := mp.PeopleSet(ctx,
+		[]*mixpanel.PeopleProperties{
+			spartan117,
+		},
+	); err != nil {
 		return err
 	}
 

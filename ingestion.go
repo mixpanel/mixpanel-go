@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -178,22 +179,24 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	}
 }
 
+type PeopleReveredProperties string
+
 const (
 	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
 
-	UserEmailProperty           = "$email"
-	UserPhoneProperty           = "$phone"
-	UserFirstNameProperty       = "$first_name"
-	UserLastNameProperty        = "$last_name"
-	UserNameProperty            = "$name"
-	UserAvatarProperty          = "$avatar"
-	UserCreatedProperty         = "$created"
-	UserCityProperty            = "$city"
-	UserRegionProperty          = "$region"
-	UserCountryCodeProperty     = "$country_code"
-	UserTimezoneProperty        = "$timezone"
-	UserBucketProperty          = "$bucket"
-	UserGeolocationByIpProperty = "$ip"
+	UserEmailProperty           PeopleReveredProperties = "$email"
+	UserPhoneProperty           PeopleReveredProperties = "$phone"
+	UserFirstNameProperty       PeopleReveredProperties = "$first_name"
+	UserLastNameProperty        PeopleReveredProperties = "$last_name"
+	UserNameProperty            PeopleReveredProperties = "$name"
+	UserAvatarProperty          PeopleReveredProperties = "$avatar"
+	UserCreatedProperty         PeopleReveredProperties = "$created"
+	UserCityProperty            PeopleReveredProperties = "$city"
+	UserRegionProperty          PeopleReveredProperties = "$region"
+	UserCountryCodeProperty     PeopleReveredProperties = "$country_code"
+	UserTimezoneProperty        PeopleReveredProperties = "$timezone"
+	UserBucketProperty          PeopleReveredProperties = "$bucket"
+	UserGeolocationByIpProperty PeopleReveredProperties = "$ip"
 )
 
 type peopleSetPayload struct {
@@ -202,15 +205,47 @@ type peopleSetPayload struct {
 	Set        map[string]any `json:"$set"`
 }
 
+type PeopleProperties struct {
+	DistinctID string
+	Properties map[string]any
+}
+
+func NewPeopleProperties(distinctID string, properties map[string]any) *PeopleProperties {
+	var prop = properties
+	if prop == nil {
+		prop = make(map[string]any)
+	}
+
+	return &PeopleProperties{
+		DistinctID: distinctID,
+		Properties: prop,
+	}
+}
+
+func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties, value any) {
+	p.Properties[string(property)] = value
+}
+
+func (p *PeopleProperties) SetIp(ip net.IP) {
+	if ip == nil {
+		return
+	}
+
+	p.Properties[string(UserGeolocationByIpProperty)] = ip.String()
+}
+
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
-func (m *Mixpanel) PeopleSet(ctx context.Context, distinctID string, properties map[string]any) error {
-	payload := peopleSetPayload{
-		Token:      m.token,
-		DistinctID: distinctID,
-		Set:        properties,
+func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
+	payloads := make([]peopleSetPayload, len(people))
+	for i, p := range people {
+		payloads[i] = peopleSetPayload{
+			Token:      m.token,
+			DistinctID: p.DistinctID,
+			Set:        p.Properties,
+		}
 	}
-	return m.doPeopleRequest(ctx, []peopleSetPayload{payload}, peopleSetURL)
+	return m.doPeopleRequest(ctx, payloads, peopleSetURL)
 }
 
 type peopleSetOncePayload struct {
@@ -221,13 +256,16 @@ type peopleSetOncePayload struct {
 
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, distinctID string, properties map[string]any) error {
-	payload := peopleSetOncePayload{
-		Token:      m.token,
-		DistinctID: distinctID,
-		SetOnce:    properties,
+func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
+	payloads := make([]peopleSetPayload, len(people))
+	for i, p := range people {
+		payloads[i] = peopleSetPayload{
+			Token:      m.token,
+			DistinctID: p.DistinctID,
+			Set:        p.Properties,
+		}
 	}
-	return m.doPeopleRequest(ctx, []peopleSetOncePayload{payload}, peopleSetOnceURL)
+	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
 }
 
 type peopleNumericalAddPayload struct {
