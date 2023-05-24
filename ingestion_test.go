@@ -680,6 +680,34 @@ func TestImport(t *testing.T) {
 	})
 }
 
+func TestPeopleProperties(t *testing.T) {
+	t.Run("nil properties doesn't panic", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", nil)
+		require.NotNil(t, props)
+	})
+
+	t.Run("can set reserved properties", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetReservedProperty(UserEmailProperty, "some-email")
+		require.Equal(t, "some-email", props.Properties["$email"])
+	})
+
+	t.Run("can set ip property", func(t *testing.T) {
+		ip := net.ParseIP("10.1.1.117")
+		require.NotNil(t, ip)
+
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetIp(ip)
+		require.Equal(t, ip.String(), props.Properties[string(UserGeolocationByIpProperty)])
+	})
+
+	t.Run("doesn't set ip if invalid", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetIp(nil)
+		require.NotContains(t, props.Properties, string(UserGeolocationByIpProperty))
+	})
+}
+
 func TestPeopleSet(t *testing.T) {
 	t.Run("can set one person", func(t *testing.T) {
 		ctx := context.Background()
@@ -767,7 +795,7 @@ func TestPeopleSetOnce(t *testing.T) {
 			peopleSet := postBody[0]
 			require.Equal(t, "some-id", peopleSet["$distinct_id"])
 
-			set, ok := peopleSet["$set"].(map[string]any)
+			set, ok := peopleSet["$set_once"].(map[string]any)
 			require.True(t, ok)
 			require.Equal(t, "some-value", set["some-key"])
 
