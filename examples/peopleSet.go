@@ -19,10 +19,10 @@ func PeopleSet() error {
 
 	// Can use the SetReversedProperty or make the reserved property yourself
 	spartan117 := mixpanel.NewPeopleProperties("Spartan-117", map[string]any{
-		string(mixpanel.UserFirstNameProperty): "John",
-		"ai":                                   "Cortana",
+		string(mixpanel.PeopleFirstNameProperty): "John",
+		"ai":                                     "Cortana",
 	})
-	spartan117.SetReservedProperty(mixpanel.UserNameProperty, "Master Chief")
+	spartan117.SetReservedProperty(mixpanel.PeopleNameProperty, "Master Chief")
 
 	if err := mp.PeopleSet(ctx,
 		[]*mixpanel.PeopleProperties{

@@ -688,7 +688,7 @@ func TestPeopleProperties(t *testing.T) {
 
 	t.Run("can set reserved properties", func(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{})
-		props.SetReservedProperty(UserEmailProperty, "some-email")
+		props.SetReservedProperty(PeopleEmailProperty, "some-email")
 		require.Equal(t, "some-email", props.Properties["$email"])
 	})
 
@@ -698,13 +698,13 @@ func TestPeopleProperties(t *testing.T) {
 
 		props := NewPeopleProperties("some-id", map[string]any{})
 		props.SetIp(ip)
-		require.Equal(t, ip.String(), props.Properties[string(UserGeolocationByIpProperty)])
+		require.Equal(t, ip.String(), props.Properties[string(PeopleGeolocationByIpProperty)])
 	})
 
 	t.Run("doesn't set ip if invalid", func(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{})
 		props.SetIp(nil)
-		require.NotContains(t, props.Properties, string(UserGeolocationByIpProperty))
+		require.NotContains(t, props.Properties, string(PeopleGeolocationByIpProperty))
 	})
 }
 
