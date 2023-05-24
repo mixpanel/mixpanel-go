@@ -257,12 +257,12 @@ type peopleSetOncePayload struct {
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
 func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
-	payloads := make([]peopleSetPayload, len(people))
+	payloads := make([]peopleSetOncePayload, len(people))
 	for i, p := range people {
-		payloads[i] = peopleSetPayload{
+		payloads[i] = peopleSetOncePayload{
 			Token:      m.token,
 			DistinctID: p.DistinctID,
-			Set:        p.Properties,
+			SetOnce:    p.Properties,
 		}
 	}
 	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
