@@ -241,6 +241,58 @@ func TestImport(t *testing.T) {
 		return query
 	}
 
+	t.Run("import successfully", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			contentType := req.Header.Get(contentTypeHeader)
+			require.Equal(t, contentType, contentTypeApplicationJson)
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
+		success, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
+	})
+
+	t.Run("content header type set correctly", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
+			contentType := req.Header.Get(contentTypeHeader)
+			require.Equal(t, contentType, contentTypeApplicationJson)
+			body := `
+			{
+			  "code": 200,
+			  "num_records_imported": 1,
+			  "status": 1
+			}
+			`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		require.NoError(t, err)
+	})
+
 	t.Run("api-secret-auth", func(t *testing.T) {
 		apiSecret := "api-secret-auth"
 

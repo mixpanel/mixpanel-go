@@ -141,7 +141,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 		m.apiEndpoint+importURL,
 		events,
 		options.Compression,
-		addQueryParams(values), acceptJson(), m.useServiceAccount(),
+		applicationJsonHeader(), addQueryParams(values), acceptJson(), m.useServiceAccount(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import:%w", err)
@@ -181,17 +181,18 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 const (
 	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
 
-	UserEmailProperty       = "$email"
-	UserPhoneProperty       = "$phone"
-	UserFirstNameProperty   = "$first_name"
-	UserLastNameProperty    = "$last_name"
-	UserAvatarProperty      = "$avatar"
-	UserCreatedProperty     = "$created"
-	UserCityProperty        = "$city"
-	UserRegionProperty      = "$region"
-	UserCountryCodeProperty = "$country_code"
-	UserTimezoneProperty    = "$timezone"
-	UserBucketProperty      = "$bucket"
+	UserEmailProperty           = "$email"
+	UserPhoneProperty           = "$phone"
+	UserFirstNameProperty       = "$first_name"
+	UserLastNameProperty        = "$last_name"
+	UserAvatarProperty          = "$avatar"
+	UserCreatedProperty         = "$created"
+	UserCityProperty            = "$city"
+	UserRegionProperty          = "$region"
+	UserCountryCodeProperty     = "$country_code"
+	UserTimezoneProperty        = "$timezone"
+	UserBucketProperty          = "$bucket"
+	UserGeolocationByIpProperty = "$ip"
 )
 
 type peopleSetPayload struct {

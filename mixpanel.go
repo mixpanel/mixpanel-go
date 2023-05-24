@@ -30,10 +30,12 @@ const (
 	goLib              = "go"
 	propertyLibVersion = "$lib_version"
 
-	acceptHeader          = "Accept"
-	acceptPlainTextHeader = "text/plain"
-	acceptJsonHeader      = "application/json"
-	contentEncodingHeader = "Content-Encoding"
+	acceptHeader               = "Accept"
+	acceptPlainTextHeader      = "text/plain"
+	acceptJsonHeader           = "application/json"
+	contentEncodingHeader      = "Content-Encoding"
+	contentTypeHeader          = "Content-Type"
+	contentTypeApplicationJson = " application/json"
 )
 
 type MpCompression int

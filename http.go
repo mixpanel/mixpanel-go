@@ -53,6 +53,12 @@ func gzipHeader() httpOptions {
 	}
 }
 
+func applicationJsonHeader() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(contentTypeHeader, contentTypeApplicationJson)
+	}
+}
+
 func (m *Mixpanel) useServiceAccount() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
