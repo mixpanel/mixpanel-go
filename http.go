@@ -59,6 +59,12 @@ func applicationJsonHeader() httpOptions {
 	}
 }
 
+func applicationFormData() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(contentTypeHeader, contentTypeApplicationForm)
+	}
+}
+
 func (m *Mixpanel) useServiceAccount() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
@@ -66,6 +72,12 @@ func (m *Mixpanel) useServiceAccount() httpOptions {
 		} else {
 			req.SetBasicAuth(m.apiSecret, "")
 		}
+	}
+}
+
+func (m *Mixpanel) useApiSecret() httpOptions {
+	return func(req *http.Request) {
+		req.SetBasicAuth(m.apiSecret, "")
 	}
 }
 
@@ -134,10 +146,10 @@ type debugHttpCall struct {
 	Headers    http.Header
 }
 
-func (m *Mixpanel) doRequest(
+func (m *Mixpanel) doRequestBody(
 	ctx context.Context,
 	method string,
-	url string,
+	reqUrl string,
 	body any,
 	compress MpCompression,
 	options ...httpOptions,
@@ -160,10 +172,14 @@ func (m *Mixpanel) doRequest(
 				return nil, fmt.Errorf("failed to gzip body: %w", err)
 			}
 			options = append(options, gzipHeader())
+		case FormData:
+			form := url.Values{}
+			form.Add("data", string(jsonMarshal))
+			requestBody = []byte(form.Encode())
 		}
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(requestBody))
+	request, err := http.NewRequestWithContext(ctx, method, reqUrl, bytes.NewReader(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -182,13 +198,14 @@ func (m *Mixpanel) doRequest(
 	return m.client.Do(request)
 }
 
-func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
-	response, err := m.doRequest(
+func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, compress MpCompression, options ...httpOptions) error {
+	response, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+u,
 		body,
-		None,
+		compress,
+		options...,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
@@ -205,18 +222,16 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) erro
 			return errors.New("code 0")
 		}
 		return nil
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return returnVerboseError(response)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("unauthorized: %w", returnVerboseError(response))
+	case http.StatusForbidden:
+		return fmt.Errorf("forbidden: %w", returnVerboseError(response))
 	default:
 		return ErrStatusCode
 	}
 }
 
 func returnVerboseError(httpResponse *http.Response) error {
-	if httpResponse.StatusCode != http.StatusOK {
-		return fmt.Errorf("non 200 status code")
-	}
-
 	var r VerboseError
 	if err := json.NewDecoder(httpResponse.Body).Decode(&r); err != nil {
 		return fmt.Errorf("failed to json decode response body: %w", err)

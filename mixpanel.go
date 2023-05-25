@@ -36,13 +36,15 @@ const (
 	contentEncodingHeader      = "Content-Encoding"
 	contentTypeHeader          = "Content-Type"
 	contentTypeApplicationJson = " application/json"
+	contentTypeApplicationForm = "application/x-www-form-urlencoded"
 )
 
 type MpCompression int
 
 var (
-	None MpCompression = 0
-	Gzip MpCompression = 1
+	None     MpCompression = 0
+	Gzip     MpCompression = 1
+	FormData MpCompression = 2
 )
 
 type Ingestion interface {
@@ -81,6 +83,8 @@ type Export interface {
 var _ Export = (*Mixpanel)(nil)
 
 type Identity interface {
+	Alias(ctx context.Context, distinctID, aliasID string) error
+	Merge(ctx context.Context, distinctID1, distinctID2 string) error
 	CreateIdentity(ctx context.Context, events []*IdentityEvent, options IdentityOptions) error
 }
 
@@ -169,7 +173,7 @@ func ServiceAccount(username, secret string) Options {
 	}
 }
 
-// DebugHttpCalls streams payload information and url information for debugging purposes
+// DebugHttpCalls streams json payload information and url information for debugging purposes
 func DebugHttpCalls(writer io.Writer) Options {
 	return func(mixpanel *Mixpanel) {
 		mixpanel.debugHttpCall = &debugHttpCalls{
