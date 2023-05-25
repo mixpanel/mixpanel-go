@@ -905,10 +905,10 @@ func TestPeopleRemoveListProperty(t *testing.T) {
 
 			require.Len(t, postBody, 1)
 
-			peopleAppend := postBody[0]
-			require.Equal(t, "some-id", peopleAppend["$distinct_id"])
+			peopleRemove := postBody[0]
+			require.Equal(t, "some-id", peopleRemove["$distinct_id"])
 
-			data, ok := peopleAppend["$remove"].(map[string]any)
+			data, ok := peopleRemove["$remove"].(map[string]any)
 			require.True(t, ok)
 			require.Equal(t, "some-value", data["list-key"])
 
@@ -926,5 +926,76 @@ func TestPeopleRemoveListProperty(t *testing.T) {
 		require.NoError(t, mp.PeopleRemoveListProperty(ctx, "some-id", map[string]any{
 			"list-key": "some-value",
 		}))
+	})
+}
+
+func TestPeopleDeleteProperty(t *testing.T) {
+	t.Run("can delete property", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleDeletePropertyUrl), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			unset := postBody[0]
+			require.Equal(t, "some-id", unset["$distinct_id"])
+
+			data, ok := unset["$unset"].([]any)
+			require.True(t, ok)
+			require.Len(t, data, 1)
+			require.Contains(t, data, "prop-key")
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleDeleteProperty(ctx, "some-id", []string{"prop-key"}))
+	})
+}
+
+func TestPeopleDeleteProfile(t *testing.T) {
+	t.Run("can delete profile", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleDeleteProfileUrl), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			delete := postBody[0]
+			require.Equal(t, "some-id", delete["$distinct_id"])
+
+			data, ok := delete["$distinct_id"].(string)
+			require.True(t, ok)
+			require.Equal(t, data, "some-id")
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
 	})
 }
