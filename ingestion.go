@@ -457,7 +457,7 @@ func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID st
 			Unset:    unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, None)
+	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, formData, acceptPlainText(), applicationFormData())
 }
 
 type groupRemoveListPropertyPayload struct {
@@ -478,7 +478,7 @@ func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupI
 			Remove:   remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl, None)
+	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl, formData, acceptPlainText(), applicationFormData())
 }
 
 type groupUnionListPropertyPayload struct {
@@ -499,7 +499,7 @@ func (m *Mixpanel) GroupUnionListProperty(ctx context.Context, groupKey, groupID
 			Union:    union,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl, None)
+	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl, formData, acceptPlainText(), applicationFormData())
 }
 
 type groupDeletePayload struct {
@@ -521,5 +521,5 @@ func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) er
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, None)
+	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, formData, acceptPlainText(), applicationFormData())
 }

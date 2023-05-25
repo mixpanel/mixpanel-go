@@ -1062,7 +1062,7 @@ func TestPeopleDeleteProfile(t *testing.T) {
 }
 
 func TestGroupSetProperty(t *testing.T) {
-	t.Run("can update group property", func(t *testing.T) {
+	t.Run("can set group property", func(t *testing.T) {
 		ctx := context.Background()
 
 		httpmock.Activate()
@@ -1100,7 +1100,7 @@ func TestGroupSetProperty(t *testing.T) {
 }
 
 func TestGroupSetOnce(t *testing.T) {
-	t.Run("can update group property", func(t *testing.T) {
+	t.Run("can set group property once", func(t *testing.T) {
 		ctx := context.Background()
 
 		httpmock.Activate()
@@ -1134,5 +1134,42 @@ func TestGroupSetOnce(t *testing.T) {
 		require.NoError(t, mp.GroupSetOnce(ctx, "group-key", "group-id", map[string]any{
 			"some-prop-key": "some-prop-value",
 		}))
+	})
+}
+
+func TestGroupDeleteProperty(t *testing.T) {
+	t.Run("can delete group property", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsDeletePropertyUrl), func(req *http.Request) (*http.Response, error) {
+			require.NoError(t, req.ParseForm())
+			data := req.Form.Get("data")
+
+			var postBody []groupDeletePropertyPayload
+			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
+			require.Len(t, postBody, 1)
+
+			groupDeleteProperty := postBody[0]
+			require.Equal(t, "token", groupDeleteProperty.Token)
+			require.Equal(t, "group-key", groupDeleteProperty.GroupKey)
+			require.Equal(t, "group-id", groupDeleteProperty.GroupId)
+
+			require.Equal(t, []string{"some-prop"}, groupDeleteProperty.Unset)
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.GroupDeleteProperty(ctx, "group-key", "group-id", []string{"some-prop"}))
 	})
 }
