@@ -21,9 +21,6 @@ const (
 
 // Export calls the Raw Export API
 // https://developer.mixpanel.com/reference/raw-event-export
-
-// Example on how to explore everything fromDate - toDate
-// Export(ctx, fromDate, toDate, ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
 func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error) {
 	query := url.Values{}
 	query.Add("from_date", fromDate.Format("2006-01-02"))
