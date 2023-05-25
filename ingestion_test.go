@@ -777,6 +777,18 @@ func TestPeopleSet(t *testing.T) {
 			}),
 		}))
 	})
+
+	t.Run("can not go above the limit", func(t *testing.T) {
+		ctx := context.Background()
+
+		mp := NewClient("token")
+		var people []*PeopleProperties
+		for i := 0; i < MaxPeopleEvents+1; i++ {
+			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
+		}
+
+		require.Error(t, mp.PeopleSet(ctx, people))
+	})
 }
 
 func TestPeopleSetOnce(t *testing.T) {
@@ -814,6 +826,55 @@ func TestPeopleSetOnce(t *testing.T) {
 			NewPeopleProperties("some-id", map[string]any{
 				"some-key": "some-value",
 			}),
+		}))
+	})
+
+	t.Run("can not go above the limit", func(t *testing.T) {
+		ctx := context.Background()
+
+		mp := NewClient("token")
+		var people []*PeopleProperties
+		for i := 0; i < MaxPeopleEvents+1; i++ {
+			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
+		}
+
+		require.Error(t, mp.PeopleSetOnce(ctx, people))
+	})
+}
+
+func TestPeopleUnion(t *testing.T) {
+	t.Run("can union a property", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleUnionToListUrl), func(req *http.Request) (*http.Response, error) {
+			var postBody []map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+
+			require.Len(t, postBody, 1)
+
+			peopleUnion := postBody[0]
+			require.Equal(t, "some-id", peopleUnion["$distinct_id"])
+
+			union, ok := peopleUnion["$union"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "some-value", union["some-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.PeopleUnionProperty(ctx, "some-id", map[string]any{
+			"some-key": "some-value",
 		}))
 	})
 }

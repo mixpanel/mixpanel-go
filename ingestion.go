@@ -11,8 +11,14 @@ import (
 )
 
 const (
+	// https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
+
 	MaxTrackEvents  = 50
-	MaxImportEvents = 2000
+	MaxImportEvents = 2_000
+
+	// https://developer.mixpanel.com/reference/user-profile-limits
+
+	MaxPeopleEvents = 2_000
 )
 
 const (
@@ -26,7 +32,6 @@ const (
 	peopleUnionToListUrl    = "/engage#profile-union"
 	peopleAppendToListUrl   = "/engage#profile-list-append"
 	peopleRemoveFromListUrl = "/engage#profile-list-remove"
-	// peopleBatchUpdateUrl    = "/engage#profile-batch-update" todo implement, won't in v0
 	peopleDeletePropertyUrl = "/engage#profile-unset"
 	peopleDeleteProfileUrl  = "/engage#profile-delete"
 
@@ -237,6 +242,10 @@ func (p *PeopleProperties) SetIp(ip net.IP) {
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
 func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
+	if len(people) > MaxPeopleEvents {
+		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
+	}
+
 	payloads := make([]peopleSetPayload, len(people))
 	for i, p := range people {
 		payloads[i] = peopleSetPayload{
@@ -257,6 +266,10 @@ type peopleSetOncePayload struct {
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
 func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
+	if len(people) > MaxPeopleEvents {
+		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
+	}
+
 	payloads := make([]peopleSetOncePayload, len(people))
 	for i, p := range people {
 		payloads[i] = peopleSetOncePayload{
