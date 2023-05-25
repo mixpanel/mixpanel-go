@@ -83,11 +83,8 @@ type Export interface {
 var _ Export = (*Mixpanel)(nil)
 
 type Identity interface {
-	// alias
 	Alias(ctx context.Context, distinctID, aliasID string) error
-
-	// merge
-
+	Merge(ctx context.Context, distinctID1, distinctID2 string) error
 	CreateIdentity(ctx context.Context, events []*IdentityEvent, options IdentityOptions) error
 }
 

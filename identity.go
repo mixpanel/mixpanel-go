@@ -10,6 +10,7 @@ import (
 const (
 	identityEndpoint = "/track#create-identity"
 	aliasEndpoint    = "/track#identity-create-alias"
+	mergeEndpoint    = "/import"
 )
 
 type aliasPayload struct {
@@ -33,6 +34,26 @@ func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error 
 	}
 
 	return m.doPeopleRequest(ctx, payload, aliasEndpoint, FormData, acceptPlainText(), applicationFormData())
+}
+
+type mergePayload struct {
+	Event      string          `json:"event"`
+	Properties mergeProperties `json:"properties"`
+}
+
+type mergeProperties struct {
+	DistinctId []string `json:"$distinct_ids"`
+}
+
+func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
+	payload := &mergePayload{
+		Event: "$merge",
+		Properties: mergeProperties{
+			DistinctId: []string{distinctID1, distinctID2},
+		},
+	}
+
+	return m.doPeopleRequest(ctx, payload, mergeEndpoint, FormData, acceptPlainText(), applicationFormData(), m.useApiSecret())
 }
 
 type IdentityEvent struct {

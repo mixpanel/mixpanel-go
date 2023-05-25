@@ -75,6 +75,12 @@ func (m *Mixpanel) useServiceAccount() httpOptions {
 	}
 }
 
+func (m *Mixpanel) useApiSecret() httpOptions {
+	return func(req *http.Request) {
+		req.SetBasicAuth(m.apiSecret, "")
+	}
+}
+
 // exportServiceAccount uses the service account if available and adds the query params
 // or falls back to apiSecret
 func (m *Mixpanel) exportServiceAccount() httpOptions {
@@ -216,18 +222,16 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, comp
 			return errors.New("code 0")
 		}
 		return nil
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return returnVerboseError(response)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("unauthorized: %w", returnVerboseError(response))
+	case http.StatusForbidden:
+		return fmt.Errorf("forbidden: %w", returnVerboseError(response))
 	default:
 		return ErrStatusCode
 	}
 }
 
 func returnVerboseError(httpResponse *http.Response) error {
-	if httpResponse.StatusCode != http.StatusOK {
-		return fmt.Errorf("non 200 status code")
-	}
-
 	var r VerboseError
 	if err := json.NewDecoder(httpResponse.Body).Decode(&r); err != nil {
 		return fmt.Errorf("failed to json decode response body: %w", err)
