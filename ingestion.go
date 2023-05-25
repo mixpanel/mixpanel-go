@@ -461,15 +461,15 @@ func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID st
 }
 
 type groupRemoveListPropertyPayload struct {
-	Token    string            `json:"$token"`
-	GroupKey string            `json:"$group_key"`
-	GroupId  string            `json:"$group_id"`
-	Remove   map[string]string `json:"$remove"`
+	Token    string         `json:"$token"`
+	GroupKey string         `json:"$group_key"`
+	GroupId  string         `json:"$group_id"`
+	Remove   map[string]any `json:"$remove"`
 }
 
 // GroupRemoveListProperty calls the Groups Remove from List Property API
 // https://developer.mixpanel.com/reference/group-remove-from-list-property
-func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]string) error {
+func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
 	payload := []groupRemoveListPropertyPayload{
 		{
 			Token:    m.token,
