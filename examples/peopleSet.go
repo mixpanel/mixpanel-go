@@ -13,8 +13,6 @@ func PeopleSet() error {
 	// fill in your token and project id and service account user name and secret
 	mp := mixpanel.NewClient(
 		"token",
-		mixpanel.ProjectID(0),
-		mixpanel.ServiceAccount("user_name", "secret"),
 	)
 
 	// Can use the SetReversedProperty or make the reserved property yourself

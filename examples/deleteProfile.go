@@ -11,8 +11,6 @@ func DeleteProfile() error {
 
 	mp := mixpanel.NewClient(
 		"token",
-		mixpanel.ProjectID(0),
-		mixpanel.ServiceAccount("user_name", "secret"),
 	)
 
 	// Can use the SetReversedProperty or make the reserved property yourself
