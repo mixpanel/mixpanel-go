@@ -398,15 +398,15 @@ func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, i
 }
 
 type groupUpdatePropertyPayload struct {
-	Token    string            `json:"$token"`
-	GroupKey string            `json:"$group_key"`
-	GroupId  string            `json:"$group_id"`
-	Set      map[string]string `json:"$set"`
+	Token    string         `json:"$token"`
+	GroupKey string         `json:"$group_key"`
+	GroupId  string         `json:"$group_id"`
+	Set      map[string]any `json:"$set"`
 }
 
 // GroupUpdateProperty calls the Group Update Property API
 // https://developer.mixpanel.com/reference/group-set-property
-func (m *Mixpanel) GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]string) error {
+func (m *Mixpanel) GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	payload := []groupUpdatePropertyPayload{
 		{
 			Token:    m.token,
@@ -415,7 +415,7 @@ func (m *Mixpanel) GroupUpdateProperty(ctx context.Context, groupKey, groupID st
 			Set:      set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupSetUrl, None)
+	return m.doPeopleRequest(ctx, payload, groupSetUrl, formData, acceptPlainText(), applicationFormData())
 }
 
 type groupSetOncePropertyPayload struct {

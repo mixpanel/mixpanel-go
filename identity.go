@@ -33,7 +33,7 @@ func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error 
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, aliasEndpoint, FormData, acceptPlainText(), applicationFormData())
+	return m.doPeopleRequest(ctx, payload, aliasEndpoint, formData, acceptPlainText(), applicationFormData())
 }
 
 type mergePayload struct {
@@ -53,7 +53,7 @@ func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) e
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, mergeEndpoint, FormData, acceptPlainText(), applicationFormData(), m.useApiSecret())
+	return m.doPeopleRequest(ctx, payload, mergeEndpoint, formData, acceptPlainText(), applicationFormData(), m.useApiSecret())
 }
 
 type IdentityEvent struct {
