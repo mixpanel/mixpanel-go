@@ -60,7 +60,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	query := url.Values{}
 	query.Add("verbose", "1")
 
-	response, err := m.doRequest(
+	response, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+trackURL,
@@ -141,7 +141,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	values.Add("project_id", strconv.Itoa(m.projectID))
 	values.Add("verbose", "1")
 
-	httpResponse, err := m.doRequest(
+	httpResponse, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+importURL,
@@ -254,7 +254,7 @@ func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) er
 			Set:        p.Properties,
 		}
 	}
-	return m.doPeopleRequest(ctx, payloads, peopleSetURL)
+	return m.doPeopleRequest(ctx, payloads, peopleSetURL, None)
 }
 
 type peopleSetOncePayload struct {
@@ -278,7 +278,7 @@ func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties
 			SetOnce:    p.Properties,
 		}
 	}
-	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
+	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL, None)
 }
 
 type peopleNumericalAddPayload struct {
@@ -297,7 +297,7 @@ func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add m
 			Add:        add,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
+	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl, None)
 }
 
 type peopleUnionPayload struct {
@@ -316,7 +316,7 @@ func (m *Mixpanel) PeopleUnionProperty(ctx context.Context, distinctID string, u
 			Union:      union,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleUnionToListUrl)
+	return m.doPeopleRequest(ctx, payload, peopleUnionToListUrl, None)
 }
 
 type peopleAppendListPayload struct {
@@ -335,7 +335,7 @@ func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID stri
 			Append:     append,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
+	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl, None)
 }
 
 type peopleListRemovePayload struct {
@@ -354,7 +354,7 @@ func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID stri
 			Remove:     remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
+	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl, None)
 }
 
 type peopleDeletePropertyPayload struct {
@@ -373,7 +373,7 @@ func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, 
 			Unset:      unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
+	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl, None)
 }
 
 type peopleDeleteProfilePayload struct {
@@ -394,7 +394,7 @@ func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, i
 			IgnoreAlias: strconv.FormatBool(ignoreAlias),
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
+	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl, None)
 }
 
 type groupUpdatePropertyPayload struct {
@@ -415,7 +415,7 @@ func (m *Mixpanel) GroupUpdateProperty(ctx context.Context, groupKey, groupID st
 			Set:      set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupSetUrl)
+	return m.doPeopleRequest(ctx, payload, groupSetUrl, None)
 }
 
 type groupSetOncePropertyPayload struct {
@@ -436,7 +436,7 @@ func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, s
 			SetOnce:  set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl)
+	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, None)
 }
 
 type groupDeletePropertyPayload struct {
@@ -457,7 +457,7 @@ func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID st
 			Unset:    unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl)
+	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, None)
 }
 
 type groupRemoveListPropertyPayload struct {
@@ -478,7 +478,7 @@ func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupI
 			Remove:   remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl)
+	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl, None)
 }
 
 type groupUnionListPropertyPayload struct {
@@ -499,7 +499,7 @@ func (m *Mixpanel) GroupUnionListProperty(ctx context.Context, groupKey, groupID
 			Union:    union,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl)
+	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl, None)
 }
 
 type groupDeletePayload struct {
@@ -521,7 +521,7 @@ func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) er
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl)
+	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, None)
 }
 
 type LookupTable struct {
@@ -551,7 +551,7 @@ func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
 	query := url.Values{}
 	query.Add("project_id", strconv.Itoa(m.projectID))
 
-	httpResponse, err := m.doRequest(
+	httpResponse, err := m.doRequestBody(
 		ctx,
 		http.MethodGet,
 		m.apiEndpoint+lookupTablesUrl,

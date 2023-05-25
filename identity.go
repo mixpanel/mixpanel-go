@@ -9,7 +9,31 @@ import (
 
 const (
 	identityEndpoint = "/track#create-identity"
+	aliasEndpoint    = "/track#identity-create-alias"
 )
+
+type aliasPayload struct {
+	Event      string          `json:"event"`
+	Properties aliasProperties `json:"properties"`
+}
+type aliasProperties struct {
+	DistinctId string `json:"distinct_id"`
+	Alias      string `json:"alias"`
+	Token      string `json:"token"`
+}
+
+func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error {
+	payload := &aliasPayload{
+		Event: "$create_alias",
+		Properties: aliasProperties{
+			DistinctId: distinctID,
+			Alias:      aliasID,
+			Token:      m.token,
+		},
+	}
+
+	return m.doPeopleRequest(ctx, payload, aliasEndpoint, FormData, acceptPlainText(), applicationFormData())
+}
 
 type IdentityEvent struct {
 	*Event
@@ -55,7 +79,7 @@ func (m *Mixpanel) CreateIdentity(ctx context.Context, events []*IdentityEvent, 
 	query := url.Values{}
 	query.Add("verbose", "1")
 
-	response, err := m.doRequest(
+	response, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+identityEndpoint,

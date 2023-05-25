@@ -38,7 +38,7 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit
 		query.Add("where", where)
 	}
 
-	httpResponse, err := m.doRequest(
+	httpResponse, err := m.doRequestBody(
 		ctx,
 		http.MethodGet,
 		m.dataEndpoint+exportUrl,
