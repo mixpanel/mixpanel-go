@@ -397,7 +397,7 @@ func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, i
 	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl, None)
 }
 
-type groupUpdatePropertyPayload struct {
+type groupSetPropertyPayload struct {
 	Token    string         `json:"$token"`
 	GroupKey string         `json:"$group_key"`
 	GroupId  string         `json:"$group_id"`
@@ -406,8 +406,8 @@ type groupUpdatePropertyPayload struct {
 
 // GroupUpdateProperty calls the Group Update Property API
 // https://developer.mixpanel.com/reference/group-set-property
-func (m *Mixpanel) GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]any) error {
-	payload := []groupUpdatePropertyPayload{
+func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+	payload := []groupSetPropertyPayload{
 		{
 			Token:    m.token,
 			GroupKey: groupKey,
@@ -436,7 +436,7 @@ func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, s
 			SetOnce:  set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, None)
+	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, formData, acceptPlainText(), applicationFormData())
 }
 
 type groupDeletePropertyPayload struct {
@@ -522,63 +522,4 @@ func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) er
 	}
 
 	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, None)
-}
-
-type LookupTable struct {
-	Code    int                  `json:"code"`
-	Status  string               `json:"status"`
-	Results []LookupTableResults `json:"results"`
-}
-
-type LookupTableResults struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type LookupTableError struct {
-	Code     int         `json:"code"`
-	ApiError string      `json:"error"`
-	Status   interface{} `json:"status"`
-}
-
-func (e LookupTableError) Error() string {
-	return e.ApiError
-}
-
-// ListLookupTables calls the List Lookup Tables API
-// https://developer.mixpanel.com/reference/list-lookup-tables
-func (m *Mixpanel) ListLookupTables(ctx context.Context) (*LookupTable, error) {
-	query := url.Values{}
-	query.Add("project_id", strconv.Itoa(m.projectID))
-
-	httpResponse, err := m.doRequestBody(
-		ctx,
-		http.MethodGet,
-		m.apiEndpoint+lookupTablesUrl,
-		nil,
-		None,
-		addQueryParams(query), acceptJson(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call list lookup tables: %v", err)
-	}
-
-	defer httpResponse.Body.Close()
-
-	switch httpResponse.StatusCode {
-	case http.StatusOK:
-		var result LookupTable
-		if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
-			return nil, fmt.Errorf("failed to decode results: %w", err)
-		}
-		return &result, nil
-	case http.StatusUnauthorized:
-		var e LookupTableError
-		if err := json.NewDecoder(httpResponse.Body).Decode(&e); err != nil {
-			return nil, fmt.Errorf("failed to decode error response:%w", err)
-		}
-		return nil, e
-	default:
-		return nil, fmt.Errorf("unexpected status code: %d", httpResponse.StatusCode)
-	}
 }
