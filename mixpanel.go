@@ -63,15 +63,12 @@ type Ingestion interface {
 	PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error
 
 	// Groups
-	GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]any) error
+	GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error
 	GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error
 	GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error
-	GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]string) error
+	GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error
 	GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error
 	GroupDelete(ctx context.Context, groupKey, groupID string) error
-
-	// Lookup
-	ListLookupTables(ctx context.Context) (*LookupTable, error)
 }
 
 var _ Ingestion = (*Mixpanel)(nil)
