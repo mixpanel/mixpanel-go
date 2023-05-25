@@ -1060,3 +1060,41 @@ func TestPeopleDeleteProfile(t *testing.T) {
 		require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
 	})
 }
+
+func TestGroupUpdateProperty(t *testing.T) {
+	t.Run("can update group property", func(t *testing.T) {
+		ctx := context.Background()
+
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupSetUrl), func(req *http.Request) (*http.Response, error) {
+			require.NoError(t, req.ParseForm())
+			data := req.Form.Get("data")
+
+			var postBody []groupUpdatePropertyPayload
+			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
+			require.Len(t, postBody, 1)
+
+			groupUpdate := postBody[0]
+			require.Equal(t, "token", groupUpdate.Token)
+			require.Equal(t, "group-key", groupUpdate.GroupKey)
+			require.Equal(t, "group-id", groupUpdate.GroupId)
+			require.Equal(t, "some-prop-value", groupUpdate.Set["some-prop-key"])
+
+			body := `
+			1
+			`
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		})
+
+		mp := NewClient("token")
+		require.NoError(t, mp.GroupUpdateProperty(ctx, "group-key", "group-id", map[string]any{
+			"some-prop-key": "some-prop-value",
+		}))
+	})
+}

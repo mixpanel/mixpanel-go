@@ -44,7 +44,7 @@ type MpCompression int
 var (
 	None     MpCompression = 0
 	Gzip     MpCompression = 1
-	FormData MpCompression = 2
+	formData MpCompression = 2
 )
 
 type Ingestion interface {
@@ -63,7 +63,7 @@ type Ingestion interface {
 	PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error
 
 	// Groups
-	GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]string) error
+	GroupUpdateProperty(ctx context.Context, groupKey, groupID string, set map[string]any) error
 	GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error
 	GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error
 	GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]string) error

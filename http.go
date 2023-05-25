@@ -172,7 +172,7 @@ func (m *Mixpanel) doRequestBody(
 				return nil, fmt.Errorf("failed to gzip body: %w", err)
 			}
 			options = append(options, gzipHeader())
-		case FormData:
+		case formData:
 			form := url.Values{}
 			form.Add("data", string(jsonMarshal))
 			requestBody = []byte(form.Encode())
