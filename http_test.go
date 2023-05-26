@@ -1,6 +1,7 @@
 package mixpanel
 
 import (
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -46,4 +47,57 @@ func TestHttpError(t *testing.T) {
 	require.Equal(t, "http body", genericHttpError.Body)
 
 	require.ErrorIs(t, err, ErrUnexpectedStatus)
+}
+
+func TestProcessPeopleRequestResponse(t *testing.T) {
+	t.Run("StatusUnauthorized", func(t *testing.T) {
+		response := &http.Response{
+			StatusCode: http.StatusUnauthorized,
+			Body: io.NopCloser(strings.NewReader(`
+			{
+				"error": "string",
+				"status": "error"
+			}
+			`)),
+		}
+
+		err := processPeopleRequestResponse(response)
+		httpErr := &HttpError{}
+		require.ErrorAs(t, err, httpErr)
+		require.Equal(t, http.StatusUnauthorized, httpErr.Status)
+	})
+
+	t.Run("StatusForbidden", func(t *testing.T) {
+		response := &http.Response{
+			StatusCode: http.StatusForbidden,
+			Body: io.NopCloser(strings.NewReader(`
+			{
+				"error": "string",
+				"status": "error"
+			}
+			`)),
+		}
+
+		err := processPeopleRequestResponse(response)
+		httpErr := &HttpError{}
+		require.ErrorAs(t, err, httpErr)
+		require.Equal(t, http.StatusForbidden, httpErr.Status)
+	})
+
+	t.Run("unknown code", func(t *testing.T) {
+		response := &http.Response{
+			StatusCode: http.StatusTeapot,
+			Body: io.NopCloser(strings.NewReader(`
+			{
+				"error": "string",
+				"status": "error"
+			}
+			`)),
+		}
+
+		err := processPeopleRequestResponse(response)
+		httpErr := &HttpError{}
+		require.ErrorAs(t, err, httpErr)
+		require.Equal(t, http.StatusTeapot, httpErr.Status)
+	})
 }
