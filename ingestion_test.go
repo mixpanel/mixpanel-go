@@ -637,275 +637,148 @@ func TestPeopleSet(t *testing.T) {
 	})
 }
 
-// func TestPeopleSetOnce(t *testing.T) {
-// 	t.Run("can set one person", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetOnceURL), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
+func TestPeopleSetOnce(t *testing.T) {
+	t.Run("can set one", func(t *testing.T) {
+		ctx := context.Background()
 
-// 			peopleSet := postBody[0]
-// 			require.Equal(t, "some-id", peopleSet["$distinct_id"])
-
-// 			set, ok := peopleSet["$set_once"].(map[string]any)
-// 			require.True(t, ok)
-// 			require.Equal(t, "some-value", set["some-key"])
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{
-// 			NewPeopleProperties("some-id", map[string]any{
-// 				"some-key": "some-value",
-// 			}),
-// 		}))
-// 	})
-
-// 	t.Run("can not go above the limit", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		mp := NewClient("token")
-// 		var people []*PeopleProperties
-// 		for i := 0; i < MaxPeopleEvents+1; i++ {
-// 			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
-// 		}
-
-// 		require.Error(t, mp.PeopleSetOnce(ctx, people))
-// 	})
-// }
-
-// func TestPeopleUnion(t *testing.T) {
-// 	t.Run("can union a property", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleUnionToListUrl), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
-
-// 			peopleUnion := postBody[0]
-// 			require.Equal(t, "some-id", peopleUnion["$distinct_id"])
-
-// 			union, ok := peopleUnion["$union"].(map[string]any)
-// 			require.True(t, ok)
-// 			require.Equal(t, "some-value", union["some-key"])
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleUnionProperty(ctx, "some-id", map[string]any{
-// 			"some-key": "some-value",
-// 		}))
-// 	})
-// }
-
-// func TestPeoplePeopleIncrement(t *testing.T) {
-// 	t.Run("can increment 1 property", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleIncrementUrl), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
-
-// 			peopleIncr := postBody[0]
-// 			require.Equal(t, "some-id", peopleIncr["$distinct_id"])
-
-// 			set, ok := peopleIncr["$add"].(map[string]any)
-// 			require.True(t, ok)
-// 			require.Equal(t, float64(1), set["some-key"])
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleIncrement(ctx, "some-id", map[string]int{
-// 			"some-key": 1,
-// 		}))
-// 	})
-// }
+		mp := NewClient("token")
+		person1 := NewPeopleProperties("some-id-1", map[string]any{
+			"some-key": "some-value",
+		})
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetOnceURL, func(body io.Reader) {
+			payload := []*peopleSetOncePayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
-// func TestPeopleAppendListProperty(t *testing.T) {
-// 	t.Run("can add to list", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleAppendToListUrl), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
-
-// 			peopleAppend := postBody[0]
-// 			require.Equal(t, "some-id", peopleAppend["$distinct_id"])
-
-// 			data, ok := peopleAppend["$append"].(map[string]any)
-// 			require.True(t, ok)
-// 			require.Equal(t, "some-value", data["list-key"])
-
-// 			body := `
-// 			1
-// 			`
+			require.Len(t, payload, 1)
+			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
 
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleAppendListProperty(ctx, "some-id", map[string]any{
-// 			"list-key": "some-value",
-// 		}))
-// 	})
-// }
-
-// func TestPeopleRemoveListProperty(t *testing.T) {
-// 	t.Run("can remove from list", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleRemoveFromListUrl), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
-
-// 			peopleRemove := postBody[0]
-// 			require.Equal(t, "some-id", peopleRemove["$distinct_id"])
-
-// 			data, ok := peopleRemove["$remove"].(map[string]any)
-// 			require.True(t, ok)
-// 			require.Equal(t, "some-value", data["list-key"])
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleRemoveListProperty(ctx, "some-id", map[string]any{
-// 			"list-key": "some-value",
-// 		}))
-// 	})
-// }
-
-// func TestPeopleDeleteProperty(t *testing.T) {
-// 	t.Run("can delete property", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleDeletePropertyUrl), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
-
-// 			unset := postBody[0]
-// 			require.Equal(t, "some-id", unset["$distinct_id"])
-
-// 			data, ok := unset["$unset"].([]any)
-// 			require.True(t, ok)
-// 			require.Len(t, data, 1)
-// 			require.Contains(t, data, "prop-key")
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleDeleteProperty(ctx, "some-id", []string{"prop-key"}))
-// 	})
-// }
-
-// func TestPeopleDeleteProfile(t *testing.T) {
-// 	t.Run("can delete profile", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleDeleteProfileUrl), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-// 			require.Len(t, postBody, 1)
-
-// 			delete := postBody[0]
-// 			require.Equal(t, "some-id", delete["$distinct_id"])
-
-// 			data, ok := delete["$distinct_id"].(string)
-// 			require.True(t, ok)
-// 			require.Equal(t, data, "some-id")
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
-// 	})
-// }
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{person1}))
+	})
+
+	t.Run("can not go above the limit", func(t *testing.T) {
+		ctx := context.Background()
+
+		mp := NewClient("token")
+		var people []*PeopleProperties
+		for i := 0; i < MaxPeopleEvents+1; i++ {
+			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
+		}
+
+		require.Error(t, mp.PeopleSetOnce(ctx, people))
+	})
+}
+
+func TestPeopleUnion(t *testing.T) {
+	ctx := context.Background()
+
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleUnionToListUrl, func(body io.Reader) {
+		arrayPayload := []*peopleUnionPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
+
+		payload := arrayPayload[0]
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "some-value", payload.Union["some-prop"])
+
+	}, peopleAndGroupSuccess())
+
+	require.NoError(t, mp.PeopleUnionProperty(ctx, "some-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
+
+func TestPeoplePeopleIncrement(t *testing.T) {
+	ctx := context.Background()
+
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleIncrementUrl, func(body io.Reader) {
+		arrayPayload := []*peopleNumericalAddPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
+
+		payload := arrayPayload[0]
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, 1, payload.Add["some-prop"])
+
+	}, peopleAndGroupSuccess())
+
+	require.NoError(t, mp.PeopleIncrement(ctx, "some-id", map[string]int{
+		"some-prop": 1,
+	}))
+}
+
+func TestPeopleAppendListProperty(t *testing.T) {
+	ctx := context.Background()
+
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleAppendToListUrl, func(body io.Reader) {
+		arrayPayload := []*peopleAppendListPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
+
+		payload := arrayPayload[0]
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "some-value", payload.Append["some-prop"])
+
+	}, peopleAndGroupSuccess())
+
+	require.NoError(t, mp.PeopleAppendListProperty(ctx, "some-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
+
+func TestPeopleRemoveListProperty(t *testing.T) {
+	ctx := context.Background()
+
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleRemoveFromListUrl, func(body io.Reader) {
+		arrayPayload := []*peopleListRemovePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
+
+		payload := arrayPayload[0]
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "some-value", payload.Remove["some-prop"])
+
+	}, peopleAndGroupSuccess())
+
+	require.NoError(t, mp.PeopleRemoveListProperty(ctx, "some-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
+
+func TestPeopleDeleteProperty(t *testing.T) {
+	ctx := context.Background()
+
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleDeletePropertyUrl, func(body io.Reader) {
+		arrayPayload := []*peopleDeletePropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
+
+		payload := arrayPayload[0]
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, []string{"some-value"}, payload.Unset)
+
+	}, peopleAndGroupSuccess())
+
+	require.NoError(t, mp.PeopleDeleteProperty(ctx, "some-id", []string{"some-value"}))
+}
+
+func TestPeopleDeleteProfile(t *testing.T) {
+	ctx := context.Background()
+
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleDeleteProfileUrl, func(body io.Reader) {
+		arrayPayload := []*peopleDeleteProfilePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
+
+		payload := arrayPayload[0]
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "true", payload.IgnoreAlias)
+
+	}, peopleAndGroupSuccess())
+
+	require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
+}
 
 // func TestGroupSetProperty(t *testing.T) {
 // 	t.Run("can set group property", func(t *testing.T) {
