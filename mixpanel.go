@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version = "v0.0.1"
+	version = "v0.1.0"
 
 	usEndpoint     = "https://api.mixpanel.com"
 	usDataEndpoint = "https://data.mixpanel.com"
