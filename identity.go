@@ -1,50 +1,53 @@
 package mixpanel
 
-// const (
-// 	identityEndpoint = "/track#create-identity"
-// 	aliasEndpoint    = "/track#identity-create-alias"
-// 	mergeEndpoint    = "/import"
-// )
+import "context"
 
-// type aliasPayload struct {
-// 	Event      string          `json:"event"`
-// 	Properties aliasProperties `json:"properties"`
-// }
-// type aliasProperties struct {
-// 	DistinctId string `json:"distinct_id"`
-// 	Alias      string `json:"alias"`
-// 	Token      string `json:"token"`
-// }
+const (
+	identityEndpoint = "/track#create-identity"
+	aliasEndpoint    = "/track#identity-create-alias"
+	mergeEndpoint    = "/import"
+)
 
-// func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error {
-// 	payload := &aliasPayload{
-// 		Event: "$create_alias",
-// 		Properties: aliasProperties{
-// 			DistinctId: distinctID,
-// 			Alias:      aliasID,
-// 			Token:      m.token,
-// 		},
-// 	}
+type aliasPayload struct {
+	Event      string          `json:"event"`
+	Properties aliasProperties `json:"properties"`
+}
+type aliasProperties struct {
+	DistinctId string `json:"distinct_id"`
+	Alias      string `json:"alias"`
+	Token      string `json:"token"`
+}
 
-// 	return m.doPeopleRequest(ctx, payload, aliasEndpoint, formData, acceptPlainText(), applicationFormData())
-// }
+func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error {
+	payload := &aliasPayload{
+		Event: "$create_alias",
+		Properties: aliasProperties{
+			DistinctId: distinctID,
+			Alias:      aliasID,
+			Token:      m.token,
+		},
+	}
 
-// type mergePayload struct {
-// 	Event      string          `json:"event"`
-// 	Properties mergeProperties `json:"properties"`
-// }
+	return m.doPeopleRequest(ctx, payload, aliasEndpoint)
+}
 
-// type mergeProperties struct {
-// 	DistinctId []string `json:"$distinct_ids"`
-// }
+type mergePayload struct {
+	Event      string          `json:"event"`
+	Properties mergeProperties `json:"properties"`
+}
 
-// func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
-// 	payload := &mergePayload{
-// 		Event: "$merge",
-// 		Properties: mergeProperties{
-// 			DistinctId: []string{distinctID1, distinctID2},
-// 		},
-// 	}
+type mergeProperties struct {
+	DistinctId []string `json:"$distinct_ids"`
+}
 
-// 	return m.doPeopleRequest(ctx, payload, mergeEndpoint, formData, acceptPlainText(), applicationFormData(), m.useApiSecret())
-// }
+func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
+	// payload := &mergePayload{
+	// 	Event: "$merge",
+	// 	Properties: mergeProperties{
+	// 		DistinctId: []string{distinctID1, distinctID2},
+	// 	},
+	// }
+
+	panic("not implemented")
+	//return m.doPeopleRequest(ctx, payload, mergeEndpoint, formData, acceptPlainText(), applicationFormData(), m.useApiSecret())
+}
