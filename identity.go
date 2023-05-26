@@ -18,6 +18,7 @@ type aliasProperties struct {
 	Token      string `json:"token"`
 }
 
+// https://developer.mixpanel.com/reference/identity-create-alias
 func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error {
 	payload := &aliasPayload{
 		Event: "$create_alias",
@@ -40,6 +41,8 @@ type mergeProperties struct {
 	DistinctId []string `json:"$distinct_ids"`
 }
 
+// https://developer.mixpanel.com/reference/identity-merge
+// must provide api secret
 func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
 	payload := &mergePayload{
 		Event: "$merge",
