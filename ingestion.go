@@ -64,7 +64,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 		http.MethodPost,
 		m.apiEndpoint+trackURL,
 		body,
-		addQueryParams(query), acceptPlainText(),
+		addQueryParams(query), acceptPlainText(), applicationJsonHeader(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to track event: %w", err)

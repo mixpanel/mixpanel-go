@@ -125,8 +125,11 @@ func TestTrack(t *testing.T) {
 		httpmock.Activate()
 		t.Cleanup(httpmock.DeactivateAndReset)
 
-		fmt.Println(client.apiEndpoint)
 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", client.apiEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, req.Header.Get("content-type"), "application/json")
+			require.Equal(t, req.Header.Get("accept"), "text/plain")
+			require.Equal(t, "1", req.URL.Query().Get("verbose"))
+
 			var r []*Event
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
 			testPayload(r)
