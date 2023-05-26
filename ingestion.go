@@ -55,7 +55,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	query := url.Values{}
 	query.Add("verbose", "1")
 
-	requestBody, err := makeRequestBody(events, None)
+	requestBody, err := makeRequestBody(events, jsonPayload, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -140,7 +140,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	values.Add("project_id", strconv.Itoa(m.projectID))
 	values.Add("verbose", "1")
 
-	body, err := makeRequestBody(events, options.Compression)
+	body, err := makeRequestBody(events, jsonPayload, options.Compression)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request body: %w", err)
 	}
