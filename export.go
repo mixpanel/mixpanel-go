@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -40,7 +39,6 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit
 		http.MethodGet,
 		m.dataEndpoint+exportUrl,
 		nil,
-		None,
 		m.exportServiceAccount(), acceptPlainText(), addQueryParams(query),
 	)
 	if err != nil {
@@ -64,13 +62,6 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit
 		return results, nil
 
 	default:
-		body, err := io.ReadAll(httpResponse.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, HttpError{
-			Status: httpResponse.StatusCode,
-			Body:   string(body),
-		}
+		return nil, newHttpError(httpResponse.StatusCode, httpResponse.Body)
 	}
 }

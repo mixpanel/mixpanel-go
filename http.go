@@ -13,8 +13,16 @@ import (
 	"strconv"
 )
 
+type MpCompression int
+
 var (
-	ErrStatusCode = errors.New("unexpected status code")
+	None     MpCompression = 0
+	Gzip     MpCompression = 1
+	formData MpCompression = 2
+)
+
+var (
+	ErrUnexpectedStatus = errors.New("unexpected status code")
 
 	apiErrorStatus = 0
 )
@@ -24,25 +32,23 @@ type HttpError struct {
 	Body   string
 }
 
+func newHttpError(statusCode int, data io.Reader) error {
+	body, err := io.ReadAll(data)
+	if err != nil {
+		return err
+	}
+	return HttpError{
+		Status: statusCode,
+		Body:   string(body),
+	}
+}
+
 func (h HttpError) Error() string {
-	return ErrStatusCode.Error()
+	return fmt.Sprintf("http error occur: %v", ErrUnexpectedStatus)
 }
 
-type VerboseError struct {
-	ApiError string `json:"error"`
-	Status   int    `json:"status"`
-}
-
-func (a VerboseError) Error() string {
-	return a.ApiError
-}
-
-type PeopleError struct {
-	Code int `json:"code"`
-}
-
-func (p PeopleError) Error() string {
-	return "people update return code 0"
+func (h HttpError) Unwrap() error {
+	return ErrUnexpectedStatus
 }
 
 type httpOptions func(req *http.Request)
@@ -139,30 +145,33 @@ func (d *debugHttpCalls) writeDebug(call debugHttpCall) error {
 	return nil
 }
 
-type debugHttpCall struct {
-	RawPayload string
-	Url        string
-	Query      url.Values
-	Headers    http.Header
+func gzipBody(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gzip := gzip.NewWriter(&buf)
+	if _, err := gzip.Write(data); err != nil {
+		return nil, fmt.Errorf("failed to compress body using gzip: %w", err)
+	}
+
+	if err := gzip.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
-func (m *Mixpanel) doRequestBody(
-	ctx context.Context,
-	method string,
-	reqUrl string,
-	body any,
-	compress MpCompression,
-	options ...httpOptions,
-) (*http.Response, error) {
-	var debugHttpCall debugHttpCall
+type debugHttpCall struct {
+	Url     string
+	Query   url.Values
+	Headers http.Header
+}
 
+func requestBody(body any, compress MpCompression) (*bytes.Reader, error) {
 	var requestBody []byte
 	if body != nil {
 		jsonMarshal, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create http body: %w", err)
 		}
-		debugHttpCall.RawPayload = string(jsonMarshal)
 		requestBody = jsonMarshal
 
 		switch compress {
@@ -171,7 +180,6 @@ func (m *Mixpanel) doRequestBody(
 			if err != nil {
 				return nil, fmt.Errorf("failed to gzip body: %w", err)
 			}
-			options = append(options, gzipHeader())
 		case formData:
 			form := url.Values{}
 			form.Add("data", string(jsonMarshal))
@@ -179,7 +187,19 @@ func (m *Mixpanel) doRequestBody(
 		}
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, reqUrl, bytes.NewReader(requestBody))
+	return bytes.NewReader(requestBody), nil
+}
+
+func (m *Mixpanel) doRequestBody(
+	ctx context.Context,
+	method string,
+	requestUrl string,
+	body io.Reader,
+	options ...httpOptions,
+) (*http.Response, error) {
+	var debugHttpCall debugHttpCall
+
+	request, err := http.NewRequestWithContext(ctx, method, requestUrl, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -199,14 +219,19 @@ func (m *Mixpanel) doRequestBody(
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, compress MpCompression, options ...httpOptions) error {
+	requestBody, err := requestBody(body, formData)
+	if err != nil {
+		return fmt.Errorf("failed to create request body: %w", err)
+	}
+
 	response, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+u,
-		body,
-		compress,
+		requestBody,
 		options...,
 	)
+
 	if err != nil {
 		return fmt.Errorf("failed to post request: %w", err)
 	}
@@ -223,34 +248,32 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, comp
 		}
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("unauthorized: %w", returnVerboseError(response))
+		return fmt.Errorf("unauthorized: %w", parseVerboseApiError(response.Body))
 	case http.StatusForbidden:
-		return fmt.Errorf("forbidden: %w", returnVerboseError(response))
+		return fmt.Errorf("forbidden: %w", parseVerboseApiError(response.Body))
 	default:
-		return ErrStatusCode
+		return newHttpError(response.StatusCode, response.Body)
 	}
 }
 
-func returnVerboseError(httpResponse *http.Response) error {
+type VerboseError struct {
+	ApiError string `json:"error"`
+	Status   int    `json:"status"`
+}
+
+func (a VerboseError) Error() string {
+	return a.ApiError
+}
+
+func parseVerboseApiError(jsonReader io.Reader) error {
 	var r VerboseError
-	if err := json.NewDecoder(httpResponse.Body).Decode(&r); err != nil {
+	if err := json.NewDecoder(jsonReader).Decode(&r); err != nil {
 		return fmt.Errorf("failed to json decode response body: %w", err)
 	}
 
 	if r.Status == apiErrorStatus {
 		return r
 	}
-	return nil
-}
 
-func gzipBody(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	gzip := gzip.NewWriter(&buf)
-	if _, err := gzip.Write(data); err != nil {
-		return nil, fmt.Errorf("failed to compress body using gzip: %w", err)
-	}
-	if err := gzip.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
-	}
-	return buf.Bytes(), nil
+	return nil
 }

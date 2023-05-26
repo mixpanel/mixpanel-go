@@ -41,12 +41,7 @@ const (
 	groupsDeletePropertyUrl         = "/groups#group-unset"
 	groupsRemoveFromListPropertyUrl = "/groups#group-remove-from-list"
 	groupsUnionListPropertyUrl      = "/groups#group-union"
-	// groupsBatchGroupProfilesUrl     = "/groups#group-batch-update" todo implement, won't in v0
-	groupsDeleteGroupUrl = "/groups#group-delete"
-
-	// Lookup tables
-	lookupTablesUrl = "/lookup-tables"
-	//replaceLookupTableUrl = "/lookup-tables/" todo implement, won't in v0
+	groupsDeleteGroupUrl            = "/groups#group-delete"
 )
 
 // Track calls the Track endpoint
@@ -60,12 +55,16 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	query := url.Values{}
 	query.Add("verbose", "1")
 
+	body, err := requestBody(events, None)
+	if err != nil {
+		return fmt.Errorf("failed to create request body: %w", err)
+	}
+
 	response, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+trackURL,
-		events,
-		None,
+		body,
 		addQueryParams(query), acceptPlainText(),
 	)
 	if err != nil {
@@ -73,7 +72,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	}
 	defer response.Body.Close()
 
-	return returnVerboseError(response)
+	return parseVerboseApiError(response.Body)
 }
 
 type ImportFailedValidationError struct {
@@ -141,13 +140,22 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	values.Add("project_id", strconv.Itoa(m.projectID))
 	values.Add("verbose", "1")
 
+	body, err := requestBody(events, options.Compression)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request body: %w", err)
+	}
+
+	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), m.useServiceAccount()}
+	if options.Compression == Gzip {
+		httpOptions = append(httpOptions, gzipHeader())
+	}
+
 	httpResponse, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+importURL,
-		events,
-		options.Compression,
-		applicationJsonHeader(), addQueryParams(values), acceptJson(), m.useServiceAccount(),
+		body,
+		httpOptions...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import:%w", err)

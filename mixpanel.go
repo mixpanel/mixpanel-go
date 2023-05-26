@@ -39,14 +39,6 @@ const (
 	contentTypeApplicationForm = "application/x-www-form-urlencoded"
 )
 
-type MpCompression int
-
-var (
-	None     MpCompression = 0
-	Gzip     MpCompression = 1
-	formData MpCompression = 2
-)
-
 type Ingestion interface {
 	// Events
 	Track(ctx context.Context, events []*Event) error
