@@ -15,7 +15,9 @@ func ImportExample() error {
 	// fill in your token and project id and service account user name and secret
 	mp := mixpanel.NewClient(
 		"token",
+		// Need to provide project id if you want to use the import api
 		mixpanel.ProjectID(0),
+		// Need to provide service account or api secret if you want to use the import api
 		mixpanel.ServiceAccount("user_name", "secret"),
 	)
 

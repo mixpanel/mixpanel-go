@@ -126,6 +126,7 @@ func (e ImportGenericError) Error() string {
 
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
+// Need to provide project id and api secret or service account
 func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
 	if len(events) > MaxImportEvents {
 		return nil, fmt.Errorf("max import events is %d", MaxImportEvents)
