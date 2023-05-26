@@ -1,65 +1,44 @@
 package mixpanel
 
-// func TestAlias(t *testing.T) {
-// 	t.Run("can call alias", func(t *testing.T) {
-// 		ctx := context.Background()
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"testing"
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+	"github.com/stretchr/testify/require"
+)
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, aliasEndpoint), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
-// 			require.NotEmpty(t, data)
+func TestAlias(t *testing.T) {
+	ctx := context.Background()
 
-// 			aliasPost := &aliasPayload{}
-// 			require.NoError(t, json.Unmarshal([]byte(data), aliasPost))
-// 			require.Equal(t, "$create_alias", aliasPost.Event)
-// 			require.Equal(t, "distinct_id", aliasPost.Properties.DistinctId)
-// 			require.Equal(t, "alias_id", aliasPost.Properties.Alias)
-// 			require.Equal(t, "token", aliasPost.Properties.Token)
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, aliasEndpoint, func(body io.Reader) {
+		payload := &aliasPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
-// 			body := `
-// 			1
-// 			`
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+		require.Equal(t, "$create_alias", payload.Event)
+		require.Equal(t, "distinct-id", payload.Properties.DistinctId)
+		require.Equal(t, "alias-id", payload.Properties.Alias)
+		require.Equal(t, "token", payload.Properties.Token)
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.Alias(ctx, "alias_id", "distinct_id"))
-// 	})
-// }
+	}, peopleAndGroupSuccess())
 
-// func TestMerge(t *testing.T) {
-// 	t.Run("can call merge", func(t *testing.T) {
-// 		ctx := context.Background()
+	require.NoError(t, mp.Alias(ctx, "alias-id", "distinct-id"))
+}
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+func TestMerge(t *testing.T) {
+	ctx := context.Background()
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, mergeEndpoint), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
-// 			require.NotEmpty(t, data)
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, mergeEndpoint, func(body io.Reader) {
+		payload := &mergePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
-// 			mergePost := &mergePayload{}
-// 			require.NoError(t, json.Unmarshal([]byte(data), mergePost))
-// 			require.Equal(t, "$merge", mergePost.Event)
-// 			require.Equal(t, []string{"distinct_id1", "distinct_id2"}, mergePost.Properties.DistinctId)
+		require.Equal(t, "$merge", payload.Event)
+		require.Equal(t, []string{"alias-id", "distinct-id"}, payload.Properties.DistinctId)
 
-// 			body := `
-// 			1
-// 			`
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+	}, peopleAndGroupSuccess())
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.Merge(ctx, "distinct_id1", "distinct_id2"))
-// 	})
-// }
+	require.NoError(t, mp.Merge(ctx, "alias-id", "distinct-id"))
+}

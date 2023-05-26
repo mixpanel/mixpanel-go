@@ -65,12 +65,6 @@ func applicationJsonHeader() httpOptions {
 	}
 }
 
-func applicationFormData() httpOptions {
-	return func(req *http.Request) {
-		req.Header.Set(contentTypeHeader, contentTypeApplicationForm)
-	}
-}
-
 func (m *Mixpanel) useServiceAccountOrProjectSecret() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
@@ -218,7 +212,7 @@ func (m *Mixpanel) doRequestBody(
 	return m.client.Do(request)
 }
 
-func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
+func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, option ...httpOptions) error {
 	requestBody, err := makeRequestBody(body, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)

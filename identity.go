@@ -41,13 +41,12 @@ type mergeProperties struct {
 }
 
 func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
-	// payload := &mergePayload{
-	// 	Event: "$merge",
-	// 	Properties: mergeProperties{
-	// 		DistinctId: []string{distinctID1, distinctID2},
-	// 	},
-	// }
+	payload := &mergePayload{
+		Event: "$merge",
+		Properties: mergeProperties{
+			DistinctId: []string{distinctID1, distinctID2},
+		},
+	}
 
-	panic("not implemented")
-	//return m.doPeopleRequest(ctx, payload, mergeEndpoint, formData, acceptPlainText(), applicationFormData(), m.useApiSecret())
+	return m.doPeopleRequest(ctx, payload, mergeEndpoint, m.useApiSecret())
 }
