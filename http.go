@@ -44,7 +44,7 @@ func newHttpError(statusCode int, data io.Reader) error {
 }
 
 func (h HttpError) Error() string {
-	return fmt.Sprintf("http error occur: %v", ErrUnexpectedStatus)
+	return fmt.Sprintf("unexpected status code: %d, body: %s", h.Status, h.Body)
 }
 
 func (h HttpError) Unwrap() error {
@@ -62,6 +62,12 @@ func gzipHeader() httpOptions {
 func applicationJsonHeader() httpOptions {
 	return func(req *http.Request) {
 		req.Header.Set(contentTypeHeader, contentTypeApplicationJson)
+	}
+}
+
+func applicationFormData() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(contentTypeHeader, contentTypeApplicationForm)
 	}
 }
 
@@ -212,12 +218,11 @@ func (m *Mixpanel) doRequestBody(
 	return m.client.Do(request)
 }
 
-func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, option ...httpOptions) error {
+func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
 	requestBody, err := makeRequestBody(body, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
-
 	response, err := m.doRequestBody(
 		ctx,
 		http.MethodPost,
@@ -232,6 +237,33 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, opti
 	}
 	defer response.Body.Close()
 
+	return processPeopleRequestResponse(response)
+}
+
+func (m *Mixpanel) doIdentifyRequest(ctx context.Context, body any, u string, option ...httpOptions) error {
+	requestBody, err := makeRequestBody(body, formData)
+	if err != nil {
+		return fmt.Errorf("failed to create request body: %w", err)
+	}
+
+	requestOptions := append([]httpOptions{acceptPlainText(), applicationFormData()}, option...)
+	response, err := m.doRequestBody(
+		ctx,
+		http.MethodPost,
+		m.apiEndpoint+u,
+		requestBody,
+		requestOptions...,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to post request: %w", err)
+	}
+	defer response.Body.Close()
+
+	return processPeopleRequestResponse(response)
+}
+
+func processPeopleRequestResponse(response *http.Response) error {
 	switch response.StatusCode {
 	case http.StatusOK:
 		var code int

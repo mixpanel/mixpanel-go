@@ -28,7 +28,7 @@ func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error 
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, aliasEndpoint)
+	return m.doIdentifyRequest(ctx, payload, aliasEndpoint)
 }
 
 type mergePayload struct {
@@ -48,5 +48,5 @@ func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) e
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, mergeEndpoint, m.useApiSecret())
+	return m.doIdentifyRequest(ctx, payload, mergeEndpoint, m.useApiSecret())
 }
