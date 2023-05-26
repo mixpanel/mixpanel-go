@@ -71,7 +71,7 @@ func applicationFormData() httpOptions {
 	}
 }
 
-func (m *Mixpanel) useServiceAccount() httpOptions {
+func (m *Mixpanel) useServiceAccountOrProjectSecret() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
 			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)

@@ -54,7 +54,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	query := url.Values{}
 	query.Add("verbose", "1")
 
-	body, err := makeRequestBody(events, None)
+	requestBody, err := makeRequestBody(events, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -63,7 +63,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 		ctx,
 		http.MethodPost,
 		m.apiEndpoint+trackURL,
-		body,
+		requestBody,
 		addQueryParams(query), acceptPlainText(), applicationJsonHeader(),
 	)
 	if err != nil {
@@ -144,7 +144,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 		return nil, fmt.Errorf("failed to create request body: %w", err)
 	}
 
-	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), m.useServiceAccount()}
+	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), m.useServiceAccountOrProjectSecret()}
 	if options.Compression == Gzip {
 		httpOptions = append(httpOptions, gzipHeader())
 	}

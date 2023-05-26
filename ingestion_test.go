@@ -239,7 +239,36 @@ func TestTrack(t *testing.T) {
 }
 
 func TestImport(t *testing.T) {
-	ctx := context.Background()
+	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, queryValues url.Values, testPayload func([]*Event), httpResponse *http.Response) {
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", client.apiEndpoint, importURL), queryValues, func(req *http.Request) (*http.Response, error) {
+			auth := req.Header.Get("authorization")
+			if client.serviceAccount != nil {
+				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.serviceAccount.Username+":"+client.serviceAccount.Secret)))
+			} else {
+				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.apiSecret+":")))
+			}
+
+			compress := req.Header.Get("content-encoding")
+			reader := req.Body
+			if compress == "gzip" {
+				require.Equal(t, req.Header.Get("Content-Encoding"), "gzip")
+				var err error
+				reader, err = gzip.NewReader(req.Body)
+				require.NoError(t, err)
+			} else {
+				require.Equal(t, req.Header.Get("Content-Encoding"), "")
+			}
+
+			var r []*Event
+			require.NoError(t, json.NewDecoder(reader).Decode(&r))
+			testPayload(r)
+
+			return httpResponse, nil
+		})
+	}
 
 	getValues := func(projectID int, strict bool) url.Values {
 		query := url.Values{}
@@ -254,275 +283,131 @@ func TestImport(t *testing.T) {
 	}
 
 	t.Run("import successfully", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			contentType := req.Header.Get(contentTypeHeader)
-			require.Equal(t, contentType, contentTypeApplicationJson)
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
-		success, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		success, err := mp.Import(ctx, events, ImportOptionsRecommend)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("content header type set correctly", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			contentType := req.Header.Get(contentTypeHeader)
-			require.Equal(t, contentType, contentTypeApplicationJson)
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
-		require.NoError(t, err)
-	})
-
 	t.Run("api-secret-auth", func(t *testing.T) {
-		apiSecret := "api-secret-auth"
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get("Authorization")
-
-			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(apiSecret+":"))), authHeader)
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117), ApiSecret(apiSecret))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		success, err := mp.Import(ctx, events, ImportOptionsRecommend)
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-service-account-auth", func(t *testing.T) {
-		userName := "username"
-		secret := "secret"
+	t.Run("can import gzip if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get("Authorization")
-
-			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(userName+":"+secret))), authHeader)
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117), ServiceAccount(userName, secret))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
-		require.NoError(t, err)
-	})
-
-	t.Run("api-compression-none", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get(contentEncodingHeader)
-			require.Equal(t, "", authHeader)
-
-			data, err := io.ReadAll(req.Body)
-			require.NoError(t, err)
-
-			var e []*Event
-			require.NoError(t, json.Unmarshal(data, &e))
-			require.Len(t, e, 1)
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Compression: None,
-		})
-		require.NoError(t, err)
-	})
-
-	t.Run("api-compression-gzip", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get(contentEncodingHeader)
-			require.Equal(t, "gzip", authHeader)
-
-			reader, err := gzip.NewReader(req.Body)
-			require.NoError(t, err)
-
-			data, err := io.ReadAll(reader)
-			require.NoError(t, err)
-
-			var e []*Event
-			require.NoError(t, json.Unmarshal(data, &e))
-			require.Len(t, e, 1)
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      true,
 			Compression: Gzip,
 		})
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-strict-enable", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("can import non gzip data if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, true), func(req *http.Request) (*http.Response, error) {
-			query := req.URL.Query()
-
-			require.Equal(t, "1", query.Get("strict"))
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Strict: true,
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      true,
+			Compression: None,
 		})
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-strict-disable", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("can enable strict mode if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			query := req.URL.Query()
-
-			require.Equal(t, "0", query.Get("strict"))
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, true), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Strict: false,
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      true,
+			Compression: Gzip,
 		})
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-project-set-correctly", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("can disable strict mode if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			query := req.URL.Query()
-
-			require.Equal(t, "117", query.Get("project_id"))
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
+
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      false,
+			Compression: Gzip,
+		})
+		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
 	t.Run("bad request", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Body: io.NopCloser(strings.NewReader(`
 			{
 				"code": 400,
 				"status": "Bad Request",
@@ -537,112 +422,89 @@ func TestImport(t *testing.T) {
 					}
 				]
 			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusBadRequest,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+			`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportFailedValidationError{})
+		validationError := &ImportFailedValidationError{}
+		require.ErrorAs(t, err, validationError)
+		require.Equal(t, 1, validationError.NumRecordsImported)
+		require.Equal(t, 1, len(validationError.FailedImportRecords))
+		require.Equal(t, "some-insert-id", validationError.FailedImportRecords[0].InsertID)
+		require.Equal(t, "event", validationError.FailedImportRecords[0].Field)
 	})
 
-	t.Run("unauthorized", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("rate limit exceeded", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body: io.NopCloser(strings.NewReader(`
 			{
-			  "code": 401,
-			  "error":"Unauthorized",
-			  "status": 0
+				"code": 429,
+				"error":"rate limit exceeded",
+				"status": 0
 			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusUnauthorized,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+			`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportGenericError{})
+		rateLimitError := &ImportRateLimitError{}
+		require.ErrorAs(t, err, rateLimitError)
 	})
 
-	t.Run("request entity too large", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+	t.Run("test know status code errors", func(t *testing.T) {
+		tests := []struct {
+			httpStatusCode int
+		}{
 			{
-			  "code": 429,
-			  "error":"to large",
-			  "status": 0
-			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusRequestEntityTooLarge,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportGenericError{})
-	})
-
-	t.Run("to many requests", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+				httpStatusCode: http.StatusUnauthorized,
+			},
 			{
-			  "code": 429,
-			  "error":"Project exceeded rate limits. Please retry the request with exponential backoff.",
-			  "status": 0
-			}
-			`
+				httpStatusCode: http.StatusRequestEntityTooLarge,
+			},
+		}
 
-			return &http.Response{
-				StatusCode: http.StatusTooManyRequests,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("http status code %d", test.httpStatusCode), func(t *testing.T) {
+				ctx := context.Background()
+				mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+				setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+					StatusCode: test.httpStatusCode,
+					Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`
+					{
+						"code": %d,
+						"error":"Unauthorized",
+						"status": 0
+					  }
+					`, test.httpStatusCode))),
+				})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportRateLimitError{})
+				_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+				genericError := &ImportGenericError{}
+				require.ErrorAs(t, err, genericError)
+				require.Equal(t, test.httpStatusCode, genericError.Code)
+			})
+		}
 	})
 
 	t.Run("unknown status code", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
-			{
-			  "code": 418,
-			  "error":"I am a teapot",
-			  "status": 0
-			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusTeapot,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusTeapot,
+			Body:       io.NopCloser(strings.NewReader("i'm a teapot")),
 		})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		_, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      false,
+			Compression: Gzip,
+		})
 		require.Error(t, err)
 	})
 
