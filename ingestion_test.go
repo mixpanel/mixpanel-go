@@ -521,116 +521,121 @@ func TestImport(t *testing.T) {
 	})
 }
 
-// func TestPeopleProperties(t *testing.T) {
-// 	t.Run("nil properties doesn't panic", func(t *testing.T) {
-// 		props := NewPeopleProperties("some-id", nil)
-// 		require.NotNil(t, props)
-// 	})
+func TestPeopleProperties(t *testing.T) {
+	t.Run("nil properties doesn't panic", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", nil)
+		require.NotNil(t, props)
+	})
 
-// 	t.Run("can set reserved properties", func(t *testing.T) {
-// 		props := NewPeopleProperties("some-id", map[string]any{})
-// 		props.SetReservedProperty(PeopleEmailProperty, "some-email")
-// 		require.Equal(t, "some-email", props.Properties["$email"])
-// 	})
+	t.Run("can set reserved properties", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetReservedProperty(PeopleEmailProperty, "some-email")
+		require.Equal(t, "some-email", props.Properties["$email"])
+	})
 
-// 	t.Run("can set ip property", func(t *testing.T) {
-// 		ip := net.ParseIP("10.1.1.117")
-// 		require.NotNil(t, ip)
+	t.Run("can set ip property", func(t *testing.T) {
+		ip := net.ParseIP("10.1.1.117")
+		require.NotNil(t, ip)
 
-// 		props := NewPeopleProperties("some-id", map[string]any{})
-// 		props.SetIp(ip)
-// 		require.Equal(t, ip.String(), props.Properties[string(PeopleGeolocationByIpProperty)])
-// 	})
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetIp(ip)
+		require.Equal(t, ip.String(), props.Properties[string(PeopleGeolocationByIpProperty)])
+	})
 
-// 	t.Run("doesn't set ip if invalid", func(t *testing.T) {
-// 		props := NewPeopleProperties("some-id", map[string]any{})
-// 		props.SetIp(nil)
-// 		require.NotContains(t, props.Properties, string(PeopleGeolocationByIpProperty))
-// 	})
-// }
+	t.Run("doesn't set ip if invalid", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetIp(nil)
+		require.NotContains(t, props.Properties, string(PeopleGeolocationByIpProperty))
+	})
+}
 
-// func TestPeopleSet(t *testing.T) {
-// 	t.Run("can set one person", func(t *testing.T) {
-// 		ctx := context.Background()
+func setupPeopleAndGroupsEndpoint(t *testing.T, client *Mixpanel, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
+	httpmock.Activate()
+	t.Cleanup(httpmock.DeactivateAndReset)
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+	httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", client.apiEndpoint, endpoint), func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, req.Header.Get("content-type"), "application/json")
+		require.Equal(t, req.Header.Get("accept"), "text/plain")
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		testPayload(req.Body)
 
-// 			require.Len(t, postBody, 1)
+		return httpResponse, nil
+	})
+}
 
-// 			peopleSet := postBody[0]
-// 			require.Equal(t, "some-id", peopleSet["$distinct_id"])
+var makePeopleAndGroupResponse = func(code string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(code)),
+	}
+}
 
-// 			set, ok := peopleSet["$set"].(map[string]any)
-// 			require.True(t, ok)
-// 			require.Equal(t, "some-value", set["some-key"])
+var peopleAndGroupSuccess = func() *http.Response {
+	return makePeopleAndGroupResponse("1")
+}
 
-// 			body := `
-// 			1
-// 			`
+func TestPeopleSet(t *testing.T) {
+	t.Run("can set one person", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token")
 
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+		people := NewPeopleProperties("some-id", map[string]any{
+			"some-key": "some-value",
+		})
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
-// 			NewPeopleProperties("some-id", map[string]any{
-// 				"some-key": "some-value",
-// 			}),
-// 		}))
-// 	})
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetURL, func(body io.Reader) {
+			payload := []*peopleSetPayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
-// 	t.Run("can set multiple person", func(t *testing.T) {
-// 		ctx := context.Background()
+			require.Len(t, payload, 1)
+			require.Equal(t, people.DistinctID, payload[0].DistinctID)
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+		}, peopleAndGroupSuccess())
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
-// 			var postBody []map[string]any
-// 			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-// 			require.Len(t, postBody, 2)
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
+			people,
+		}))
+	})
 
-// 			body := `
-// 			1
-// 			`
+	t.Run("can set multiple people", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token")
 
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+		person1 := NewPeopleProperties("some-id-1", map[string]any{
+			"some-key": "some-value",
+		})
+		person2 := NewPeopleProperties("some-id-2", map[string]any{
+			"some-key": "some-value",
+		})
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
-// 			NewPeopleProperties("some-id-1", map[string]any{
-// 				"some-key": "some-value-1",
-// 			}),
-// 			NewPeopleProperties("some-id-2", map[string]any{
-// 				"some-key": "some-value-2",
-// 			}),
-// 		}))
-// 	})
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetURL, func(body io.Reader) {
+			payload := []*peopleSetPayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
-// 	t.Run("can not go above the limit", func(t *testing.T) {
-// 		ctx := context.Background()
+			require.Len(t, payload, 2)
+			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
+			require.Equal(t, person2.DistinctID, payload[1].DistinctID)
 
-// 		mp := NewClient("token")
-// 		var people []*PeopleProperties
-// 		for i := 0; i < MaxPeopleEvents+1; i++ {
-// 			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
-// 		}
+		}, peopleAndGroupSuccess())
 
-// 		require.Error(t, mp.PeopleSet(ctx, people))
-// 	})
-// }
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
+			person1,
+			person2,
+		}))
+	})
+
+	t.Run("can not go above the limit", func(t *testing.T) {
+		ctx := context.Background()
+
+		mp := NewClient("token")
+		var people []*PeopleProperties
+		for i := 0; i < MaxPeopleEvents+1; i++ {
+			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
+		}
+
+		require.Error(t, mp.PeopleSet(ctx, people))
+	})
+}
 
 // func TestPeopleSetOnce(t *testing.T) {
 // 	t.Run("can set one person", func(t *testing.T) {

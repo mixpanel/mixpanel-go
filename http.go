@@ -219,7 +219,7 @@ func (m *Mixpanel) doRequestBody(
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
-	requestBody, err := makeRequestBody(body, formData)
+	requestBody, err := makeRequestBody(body, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -230,7 +230,7 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) erro
 		m.apiEndpoint+u,
 		requestBody,
 		acceptPlainText(),
-		applicationFormData(),
+		applicationJsonHeader(),
 	)
 
 	if err != nil {
