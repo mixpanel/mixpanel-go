@@ -293,14 +293,14 @@ func processPeopleRequestResponse(response *http.Response) error {
 		if err := json.NewDecoder(response.Body).Decode(&code); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
-		if code == 0 {
-			return errors.New("code 0")
+		if code == apiErrorStatus {
+			return errors.New("api return code 0")
 		}
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("unauthorized: %w", parseVerboseApiError(response.Body))
+		return fmt.Errorf("unauthorized: %w", newHttpError(response.StatusCode, response.Body))
 	case http.StatusForbidden:
-		return fmt.Errorf("forbidden: %w", parseVerboseApiError(response.Body))
+		return fmt.Errorf("forbidden: %w", newHttpError(response.StatusCode, response.Body))
 	default:
 		return newHttpError(response.StatusCode, response.Body)
 	}
