@@ -35,16 +35,8 @@ const (
 	acceptJsonHeader           = "application/json"
 	contentEncodingHeader      = "Content-Encoding"
 	contentTypeHeader          = "Content-Type"
-	contentTypeApplicationJson = " application/json"
+	contentTypeApplicationJson = "application/json"
 	contentTypeApplicationForm = "application/x-www-form-urlencoded"
-)
-
-type MpCompression int
-
-var (
-	None     MpCompression = 0
-	Gzip     MpCompression = 1
-	formData MpCompression = 2
 )
 
 type Ingestion interface {

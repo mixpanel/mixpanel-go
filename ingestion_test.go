@@ -121,101 +121,83 @@ func TestNewEventFromJson(t *testing.T) {
 }
 
 func TestTrack(t *testing.T) {
+	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, testPayload func([]*Event), httpResponse *http.Response) {
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+
+		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", client.apiEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, req.Header.Get("content-type"), "application/json")
+			require.Equal(t, req.Header.Get("accept"), "text/plain")
+			require.Equal(t, "1", req.URL.Query().Get("verbose"))
+
+			var r []*Event
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
+			testPayload(r)
+
+			return httpResponse, nil
+		})
+	}
+
+	trackSuccess := func() *http.Response {
+		body := `
+			{
+			  "error": "",
+			  "status": 1
+			}
+			`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+
 	t.Run("can track an event", func(t *testing.T) {
 		ctx := context.Background()
-
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
 		mp := NewClient("token")
+
 		events := []*Event{
 			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
 		}
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []*Event
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
+		setupHttpEndpointTest(t, mp, func(r []*Event) {
 			require.Len(t, r, 1)
 			require.ElementsMatch(t, events, r)
-
-			body := `
-			{
-			  "error": "",
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
+		}, trackSuccess())
 
 		require.NoError(t, mp.Track(ctx, events))
 	})
 
-	t.Run("can track an event to the eu", func(t *testing.T) {
+	t.Run("eu data residency works correctly", func(t *testing.T) {
 		ctx := context.Background()
+		euMixpanel := NewClient("token", EuResidency())
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		mp := NewClient("token", EuResidency())
 		events := []*Event{
-			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
+			euMixpanel.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
 		}
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", euEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []*Event
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
+		setupHttpEndpointTest(t, euMixpanel, func(r []*Event) {
 			require.Len(t, r, 1)
 			require.ElementsMatch(t, events, r)
+		}, trackSuccess())
 
-			body := `
-			{
-			  "error": "",
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
+		require.NoError(t, euMixpanel.Track(ctx, events))
 
-		require.NoError(t, mp.Track(ctx, events))
+		usMixpanel := NewClient("token")
+		require.Error(t, usMixpanel.Track(ctx, events))
 	})
 
-	t.Run("can track multiple event", func(t *testing.T) {
+	t.Run("track multiple events successfully", func(t *testing.T) {
 		ctx := context.Background()
-
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
 		mp := NewClient("token")
+
 		events := []*Event{
 			mp.NewEvent("sample_event_1", EmptyDistinctID, map[string]any{}),
 			mp.NewEvent("sample_event_2", EmptyDistinctID, map[string]any{}),
 			mp.NewEvent("sample_event_3", EmptyDistinctID, map[string]any{}),
 		}
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			var r []*Event
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&r))
+		setupHttpEndpointTest(t, mp, func(r []*Event) {
 			require.Len(t, r, 3)
-
 			require.ElementsMatch(t, events, r)
-
-			body := `
-			{
-			  "error": "",
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
+		}, trackSuccess())
 
 		require.NoError(t, mp.Track(ctx, events))
 	})
@@ -234,33 +216,59 @@ func TestTrack(t *testing.T) {
 
 	t.Run("track call failed and return error", func(t *testing.T) {
 		ctx := context.Background()
-
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
 		mp := NewClient("token")
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, trackURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+		events := []*Event{
+			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
+		}
+		setupHttpEndpointTest(t, mp, func(r []*Event) {
+			require.Len(t, r, 1)
+			require.ElementsMatch(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body: io.NopCloser(strings.NewReader(`
 			{
-			  "error": "",
-			  "status": 0
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+				"error": "some error occurred",
+				"status": 0
+			  }
+			`)),
 		})
 
-		err := mp.Track(ctx, []*Event{mp.NewEvent("test-event", EmptyDistinctID, map[string]any{})})
-		var g VerboseError
-		require.ErrorAs(t, err, &g)
+		require.Error(t, mp.Track(ctx, events))
 	})
 }
 
 func TestImport(t *testing.T) {
-	ctx := context.Background()
+	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, queryValues url.Values, testPayload func([]*Event), httpResponse *http.Response) {
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+
+		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", client.apiEndpoint, importURL), queryValues, func(req *http.Request) (*http.Response, error) {
+			auth := req.Header.Get("authorization")
+			if client.serviceAccount != nil {
+				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.serviceAccount.Username+":"+client.serviceAccount.Secret)))
+			} else {
+				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.apiSecret+":")))
+			}
+
+			compress := req.Header.Get("content-encoding")
+			reader := req.Body
+			if compress == "gzip" {
+				require.Equal(t, req.Header.Get("Content-Encoding"), "gzip")
+				var err error
+				reader, err = gzip.NewReader(req.Body)
+				require.NoError(t, err)
+			} else {
+				require.Equal(t, req.Header.Get("Content-Encoding"), "")
+			}
+
+			var r []*Event
+			require.NoError(t, json.NewDecoder(reader).Decode(&r))
+			testPayload(r)
+
+			return httpResponse, nil
+		})
+	}
 
 	getValues := func(projectID int, strict bool) url.Values {
 		query := url.Values{}
@@ -275,275 +283,131 @@ func TestImport(t *testing.T) {
 	}
 
 	t.Run("import successfully", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			contentType := req.Header.Get(contentTypeHeader)
-			require.Equal(t, contentType, contentTypeApplicationJson)
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
-		success, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		success, err := mp.Import(ctx, events, ImportOptionsRecommend)
 		require.NoError(t, err)
 
 		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("content header type set correctly", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			contentType := req.Header.Get(contentTypeHeader)
-			require.Equal(t, contentType, contentTypeApplicationJson)
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
-		require.NoError(t, err)
-	})
-
 	t.Run("api-secret-auth", func(t *testing.T) {
-		apiSecret := "api-secret-auth"
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get("Authorization")
-
-			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(apiSecret+":"))), authHeader)
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117), ApiSecret(apiSecret))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
+		success, err := mp.Import(ctx, events, ImportOptionsRecommend)
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-service-account-auth", func(t *testing.T) {
-		userName := "username"
-		secret := "secret"
+	t.Run("can import gzip if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get("Authorization")
-
-			require.Equal(t, fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(userName+":"+secret))), authHeader)
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117), ServiceAccount(userName, secret))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{})
-		require.NoError(t, err)
-	})
-
-	t.Run("api-compression-none", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get(contentEncodingHeader)
-			require.Equal(t, "", authHeader)
-
-			data, err := io.ReadAll(req.Body)
-			require.NoError(t, err)
-
-			var e []*Event
-			require.NoError(t, json.Unmarshal(data, &e))
-			require.Len(t, e, 1)
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Compression: None,
-		})
-		require.NoError(t, err)
-	})
-
-	t.Run("api-compression-gzip", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			authHeader := req.Header.Get(contentEncodingHeader)
-			require.Equal(t, "gzip", authHeader)
-
-			reader, err := gzip.NewReader(req.Body)
-			require.NoError(t, err)
-
-			data, err := io.ReadAll(reader)
-			require.NoError(t, err)
-
-			var e []*Event
-			require.NoError(t, json.Unmarshal(data, &e))
-			require.Len(t, e, 1)
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      true,
 			Compression: Gzip,
 		})
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-strict-enable", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("can import non gzip data if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, true), func(req *http.Request) (*http.Response, error) {
-			query := req.URL.Query()
-
-			require.Equal(t, "1", query.Get("strict"))
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Strict: true,
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      true,
+			Compression: None,
 		})
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-strict-disable", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("can enable strict mode if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			query := req.URL.Query()
-
-			require.Equal(t, "0", query.Get("strict"))
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, true), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptions{
-			Strict: false,
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      true,
+			Compression: Gzip,
 		})
 		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-project-set-correctly", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("can disable strict mode if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponderWithQuery(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), getValues(117, false), func(req *http.Request) (*http.Response, error) {
-			query := req.URL.Query()
-
-			require.Equal(t, "117", query.Get("project_id"))
-
-			body := `
-			{
-			  "code": 200,
-			  "num_records_imported": 1,
-			  "status": 1
-			}
-			`
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
 		})
+
+		success, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      false,
+			Compression: Gzip,
+		})
+		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
 	t.Run("bad request", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Body: io.NopCloser(strings.NewReader(`
 			{
 				"code": 400,
 				"status": "Bad Request",
@@ -558,112 +422,89 @@ func TestImport(t *testing.T) {
 					}
 				]
 			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusBadRequest,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+			`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportFailedValidationError{})
+		validationError := &ImportFailedValidationError{}
+		require.ErrorAs(t, err, validationError)
+		require.Equal(t, 1, validationError.NumRecordsImported)
+		require.Equal(t, 1, len(validationError.FailedImportRecords))
+		require.Equal(t, "some-insert-id", validationError.FailedImportRecords[0].InsertID)
+		require.Equal(t, "event", validationError.FailedImportRecords[0].Field)
 	})
 
-	t.Run("unauthorized", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	t.Run("rate limit exceeded", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body: io.NopCloser(strings.NewReader(`
 			{
-			  "code": 401,
-			  "error":"Unauthorized",
-			  "status": 0
+				"code": 429,
+				"error":"rate limit exceeded",
+				"status": 0
 			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusUnauthorized,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+			`)),
 		})
 
-		mp := NewClient("token", ProjectID(117))
 		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportGenericError{})
+		rateLimitError := &ImportRateLimitError{}
+		require.ErrorAs(t, err, rateLimitError)
 	})
 
-	t.Run("request entity too large", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+	t.Run("test know status code errors", func(t *testing.T) {
+		tests := []struct {
+			httpStatusCode int
+		}{
 			{
-			  "code": 429,
-			  "error":"to large",
-			  "status": 0
-			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusRequestEntityTooLarge,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportGenericError{})
-	})
-
-	t.Run("to many requests", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
+				httpStatusCode: http.StatusUnauthorized,
+			},
 			{
-			  "code": 429,
-			  "error":"Project exceeded rate limits. Please retry the request with exponential backoff.",
-			  "status": 0
-			}
-			`
+				httpStatusCode: http.StatusRequestEntityTooLarge,
+			},
+		}
 
-			return &http.Response{
-				StatusCode: http.StatusTooManyRequests,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("http status code %d", test.httpStatusCode), func(t *testing.T) {
+				ctx := context.Background()
+				mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+				setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+					StatusCode: test.httpStatusCode,
+					Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`
+					{
+						"code": %d,
+						"error":"Unauthorized",
+						"status": 0
+					  }
+					`, test.httpStatusCode))),
+				})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
-		require.ErrorAs(t, err, &ImportRateLimitError{})
+				_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+				genericError := &ImportGenericError{}
+				require.ErrorAs(t, err, genericError)
+				require.Equal(t, test.httpStatusCode, genericError.Code)
+			})
+		}
 	})
 
 	t.Run("unknown status code", func(t *testing.T) {
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+		ctx := context.Background()
+		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, importURL), func(req *http.Request) (*http.Response, error) {
-			body := `
-			{
-			  "code": 418,
-			  "error":"I am a teapot",
-			  "status": 0
-			}
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusTeapot,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusTeapot,
+			Body:       io.NopCloser(strings.NewReader("i'm a teapot")),
 		})
 
-		mp := NewClient("token", ProjectID(117))
-		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		_, err := mp.Import(ctx, events, ImportOptions{
+			Strict:      false,
+			Compression: Gzip,
+		})
 		require.Error(t, err)
 	})
 
@@ -708,73 +549,80 @@ func TestPeopleProperties(t *testing.T) {
 	})
 }
 
+func setupPeopleAndGroupsEndpoint(t *testing.T, client *Mixpanel, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
+	httpmock.Activate()
+	t.Cleanup(httpmock.DeactivateAndReset)
+
+	httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", client.apiEndpoint, endpoint), func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, req.Header.Get("content-type"), "application/json")
+		require.Equal(t, req.Header.Get("accept"), "text/plain")
+
+		testPayload(req.Body)
+
+		return httpResponse, nil
+	})
+}
+
+var makePeopleAndGroupResponse = func(code string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(code)),
+	}
+}
+
+var peopleAndGroupSuccess = func() *http.Response {
+	return makePeopleAndGroupResponse("1")
+}
+
 func TestPeopleSet(t *testing.T) {
 	t.Run("can set one person", func(t *testing.T) {
 		ctx := context.Background()
+		mp := NewClient("token")
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-			require.Len(t, postBody, 1)
-
-			peopleSet := postBody[0]
-			require.Equal(t, "some-id", peopleSet["$distinct_id"])
-
-			set, ok := peopleSet["$set"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "some-value", set["some-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		people := NewPeopleProperties("some-id", map[string]any{
+			"some-key": "some-value",
 		})
 
-		mp := NewClient("token")
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetURL, func(body io.Reader) {
+			payload := []*peopleSetPayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, people.DistinctID, payload[0].DistinctID)
+
+		}, peopleAndGroupSuccess())
+
 		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
-			NewPeopleProperties("some-id", map[string]any{
-				"some-key": "some-value",
-			}),
+			people,
 		}))
 	})
 
-	t.Run("can set multiple person", func(t *testing.T) {
+	t.Run("can set multiple people", func(t *testing.T) {
 		ctx := context.Background()
+		mp := NewClient("token")
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetURL), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-			require.Len(t, postBody, 2)
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
+		person1 := NewPeopleProperties("some-id-1", map[string]any{
+			"some-key": "some-value",
+		})
+		person2 := NewPeopleProperties("some-id-2", map[string]any{
+			"some-key": "some-value",
 		})
 
-		mp := NewClient("token")
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetURL, func(body io.Reader) {
+			payload := []*peopleSetPayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
+
+			require.Len(t, payload, 2)
+			require.Equal(t, mp.token, payload[0].Token)
+			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
+			require.Equal(t, mp.token, payload[1].Token)
+			require.Equal(t, person2.DistinctID, payload[1].DistinctID)
+
+		}, peopleAndGroupSuccess())
+
 		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
-			NewPeopleProperties("some-id-1", map[string]any{
-				"some-key": "some-value-1",
-			}),
-			NewPeopleProperties("some-id-2", map[string]any{
-				"some-key": "some-value-2",
-			}),
+			person1,
+			person2,
 		}))
 	})
 
@@ -792,41 +640,24 @@ func TestPeopleSet(t *testing.T) {
 }
 
 func TestPeopleSetOnce(t *testing.T) {
-	t.Run("can set one person", func(t *testing.T) {
+	t.Run("can set one", func(t *testing.T) {
 		ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleSetOnceURL), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
-
-			require.Len(t, postBody, 1)
-
-			peopleSet := postBody[0]
-			require.Equal(t, "some-id", peopleSet["$distinct_id"])
-
-			set, ok := peopleSet["$set_once"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "some-value", set["some-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
 		mp := NewClient("token")
-		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{
-			NewPeopleProperties("some-id", map[string]any{
-				"some-key": "some-value",
-			}),
-		}))
+		person1 := NewPeopleProperties("some-id-1", map[string]any{
+			"some-key": "some-value",
+		})
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetOnceURL, func(body io.Reader) {
+			payload := []*peopleSetOncePayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, mp.token, payload[0].Token)
+			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
+
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{person1}))
 	})
 
 	t.Run("can not go above the limit", func(t *testing.T) {
@@ -843,446 +674,238 @@ func TestPeopleSetOnce(t *testing.T) {
 }
 
 func TestPeopleUnion(t *testing.T) {
-	t.Run("can union a property", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleUnionToListUrl, func(body io.Reader) {
+		arrayPayload := []*peopleUnionPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleUnionToListUrl), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "some-value", payload.Union["some-prop"])
 
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			peopleUnion := postBody[0]
-			require.Equal(t, "some-id", peopleUnion["$distinct_id"])
-
-			union, ok := peopleUnion["$union"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "some-value", union["some-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.PeopleUnionProperty(ctx, "some-id", map[string]any{
-			"some-key": "some-value",
-		}))
-	})
+	require.NoError(t, mp.PeopleUnionProperty(ctx, "some-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestPeoplePeopleIncrement(t *testing.T) {
-	t.Run("can increment 1 property", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleIncrementUrl, func(body io.Reader) {
+		arrayPayload := []*peopleNumericalAddPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleIncrementUrl), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, 1, payload.Add["some-prop"])
 
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			peopleIncr := postBody[0]
-			require.Equal(t, "some-id", peopleIncr["$distinct_id"])
-
-			set, ok := peopleIncr["$add"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, float64(1), set["some-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.PeopleIncrement(ctx, "some-id", map[string]int{
-			"some-key": 1,
-		}))
-	})
+	require.NoError(t, mp.PeopleIncrement(ctx, "some-id", map[string]int{
+		"some-prop": 1,
+	}))
 }
 
 func TestPeopleAppendListProperty(t *testing.T) {
-	t.Run("can add to list", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleAppendToListUrl, func(body io.Reader) {
+		arrayPayload := []*peopleAppendListPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleAppendToListUrl), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "some-value", payload.Append["some-prop"])
 
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			peopleAppend := postBody[0]
-			require.Equal(t, "some-id", peopleAppend["$distinct_id"])
-
-			data, ok := peopleAppend["$append"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "some-value", data["list-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.PeopleAppendListProperty(ctx, "some-id", map[string]any{
-			"list-key": "some-value",
-		}))
-	})
+	require.NoError(t, mp.PeopleAppendListProperty(ctx, "some-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestPeopleRemoveListProperty(t *testing.T) {
-	t.Run("can remove from list", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleRemoveFromListUrl, func(body io.Reader) {
+		arrayPayload := []*peopleListRemovePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleRemoveFromListUrl), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "some-value", payload.Remove["some-prop"])
 
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			peopleRemove := postBody[0]
-			require.Equal(t, "some-id", peopleRemove["$distinct_id"])
-
-			data, ok := peopleRemove["$remove"].(map[string]any)
-			require.True(t, ok)
-			require.Equal(t, "some-value", data["list-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.PeopleRemoveListProperty(ctx, "some-id", map[string]any{
-			"list-key": "some-value",
-		}))
-	})
+	require.NoError(t, mp.PeopleRemoveListProperty(ctx, "some-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestPeopleDeleteProperty(t *testing.T) {
-	t.Run("can delete property", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleDeletePropertyUrl, func(body io.Reader) {
+		arrayPayload := []*peopleDeletePropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleDeletePropertyUrl), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, []string{"some-value"}, payload.Unset)
 
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			unset := postBody[0]
-			require.Equal(t, "some-id", unset["$distinct_id"])
-
-			data, ok := unset["$unset"].([]any)
-			require.True(t, ok)
-			require.Len(t, data, 1)
-			require.Contains(t, data, "prop-key")
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.PeopleDeleteProperty(ctx, "some-id", []string{"prop-key"}))
-	})
+	require.NoError(t, mp.PeopleDeleteProperty(ctx, "some-id", []string{"some-value"}))
 }
 
 func TestPeopleDeleteProfile(t *testing.T) {
-	t.Run("can delete profile", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, peopleDeleteProfileUrl, func(body io.Reader) {
+		arrayPayload := []*peopleDeleteProfilePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, peopleDeleteProfileUrl), func(req *http.Request) (*http.Response, error) {
-			var postBody []map[string]any
-			require.NoError(t, json.NewDecoder(req.Body).Decode(&postBody))
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "some-id", payload.DistinctID)
+		require.Equal(t, "true", payload.IgnoreAlias)
 
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			delete := postBody[0]
-			require.Equal(t, "some-id", delete["$distinct_id"])
-
-			data, ok := delete["$distinct_id"].(string)
-			require.True(t, ok)
-			require.Equal(t, data, "some-id")
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
-	})
+	require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
 }
 
 func TestGroupSetProperty(t *testing.T) {
-	t.Run("can set group property", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupSetUrl, func(body io.Reader) {
+		arrayPayload := []*groupSetPropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupSetUrl), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.Set["some-prop"])
 
-			var postBody []groupSetPropertyPayload
-			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			groupSet := postBody[0]
-			require.Equal(t, "token", groupSet.Token)
-			require.Equal(t, "group-key", groupSet.GroupKey)
-			require.Equal(t, "group-id", groupSet.GroupId)
-			require.Equal(t, "some-prop-value", groupSet.Set["some-prop-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.GroupSet(ctx, "group-key", "group-id", map[string]any{
-			"some-prop-key": "some-prop-value",
-		}))
-	})
+	require.NoError(t, mp.GroupSet(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestGroupSetOnce(t *testing.T) {
-	t.Run("can set group property once", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsSetOnceUrl, func(body io.Reader) {
+		arrayPayload := []*groupSetOncePropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsSetOnceUrl), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.SetOnce["some-prop"])
 
-			var postBody []groupSetOncePropertyPayload
-			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			groupUpdate := postBody[0]
-			require.Equal(t, "token", groupUpdate.Token)
-			require.Equal(t, "group-key", groupUpdate.GroupKey)
-			require.Equal(t, "group-id", groupUpdate.GroupId)
-			require.Equal(t, "some-prop-value", groupUpdate.SetOnce["some-prop-key"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.GroupSetOnce(ctx, "group-key", "group-id", map[string]any{
-			"some-prop-key": "some-prop-value",
-		}))
-	})
+	require.NoError(t, mp.GroupSetOnce(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestGroupDeleteProperty(t *testing.T) {
-	t.Run("can delete group property", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsDeletePropertyUrl, func(body io.Reader) {
+		arrayPayload := []*groupDeletePropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsDeletePropertyUrl), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, []string{"some-value"}, payload.Unset)
 
-			var postBody []groupDeletePropertyPayload
-			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			groupDeleteProperty := postBody[0]
-			require.Equal(t, "token", groupDeleteProperty.Token)
-			require.Equal(t, "group-key", groupDeleteProperty.GroupKey)
-			require.Equal(t, "group-id", groupDeleteProperty.GroupId)
-
-			require.Equal(t, []string{"some-prop"}, groupDeleteProperty.Unset)
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.GroupDeleteProperty(ctx, "group-key", "group-id", []string{"some-prop"}))
-	})
+	require.NoError(t, mp.GroupDeleteProperty(ctx, "group-key", "group-id", []string{"some-value"}))
 }
 
 func TestGroupRemoveListProperty(t *testing.T) {
-	t.Run("can remove list property", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsRemoveFromListPropertyUrl, func(body io.Reader) {
+		arrayPayload := []*groupRemoveListPropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsRemoveFromListPropertyUrl), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.Remove["some-prop"])
 
-			var postBody []groupRemoveListPropertyPayload
-			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			removeList := postBody[0]
-			require.Equal(t, "token", removeList.Token)
-			require.Equal(t, "group-key", removeList.GroupKey)
-			require.Equal(t, "group-id", removeList.GroupId)
-
-			require.Equal(t, "value", removeList.Remove["list"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.GroupRemoveListProperty(ctx, "group-key", "group-id", map[string]any{
-			"list": "value",
-		}))
-	})
+	require.NoError(t, mp.GroupRemoveListProperty(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestGroupUnionListProperty(t *testing.T) {
-	t.Run("can union list", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsUnionListPropertyUrl, func(body io.Reader) {
+		arrayPayload := []*groupUnionListPropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsUnionListPropertyUrl), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.Union["some-prop"])
 
-			var postBody []groupUnionListPropertyPayload
-			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			unionList := postBody[0]
-			require.Equal(t, "token", unionList.Token)
-			require.Equal(t, "group-key", unionList.GroupKey)
-			require.Equal(t, "group-id", unionList.GroupId)
-
-			require.Equal(t, "value", unionList.Union["list"])
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.GroupUnionListProperty(ctx, "group-key", "group-id", map[string]any{
-			"list": "value",
-		}))
-	})
+	require.NoError(t, mp.GroupUnionListProperty(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
 }
 
 func TestGroupDelete(t *testing.T) {
-	t.Run("can delete group", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsDeleteGroupUrl, func(body io.Reader) {
+		arrayPayload := []*groupDeletePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsDeleteGroupUrl), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
 
-			var postBody []groupDeletePayload
-			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-			delete := postBody[0]
-			require.Equal(t, "token", delete.Token)
-			require.Equal(t, "group-key", delete.GroupKey)
-			require.Equal(t, "group-id", delete.GroupId)
-
-			body := `
-			1
-			`
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.GroupDelete(ctx, "group-key", "group-id"))
-	})
+	require.NoError(t, mp.GroupDelete(ctx, "group-key", "group-id"))
 }
