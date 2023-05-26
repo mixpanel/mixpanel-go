@@ -613,7 +613,9 @@ func TestPeopleSet(t *testing.T) {
 			require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
 			require.Len(t, payload, 2)
+			require.Equal(t, mp.token, payload[0].Token)
 			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
+			require.Equal(t, mp.token, payload[1].Token)
 			require.Equal(t, person2.DistinctID, payload[1].DistinctID)
 
 		}, peopleAndGroupSuccess())
@@ -650,6 +652,7 @@ func TestPeopleSetOnce(t *testing.T) {
 			require.NoError(t, json.NewDecoder(body).Decode(&payload))
 
 			require.Len(t, payload, 1)
+			require.Equal(t, mp.token, payload[0].Token)
 			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
 
 		}, peopleAndGroupSuccess())
@@ -679,6 +682,7 @@ func TestPeopleUnion(t *testing.T) {
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
 		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
 		require.Equal(t, "some-id", payload.DistinctID)
 		require.Equal(t, "some-value", payload.Union["some-prop"])
 
@@ -698,6 +702,7 @@ func TestPeoplePeopleIncrement(t *testing.T) {
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
 		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
 		require.Equal(t, "some-id", payload.DistinctID)
 		require.Equal(t, 1, payload.Add["some-prop"])
 
@@ -717,6 +722,7 @@ func TestPeopleAppendListProperty(t *testing.T) {
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
 		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
 		require.Equal(t, "some-id", payload.DistinctID)
 		require.Equal(t, "some-value", payload.Append["some-prop"])
 
@@ -736,6 +742,7 @@ func TestPeopleRemoveListProperty(t *testing.T) {
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
 		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
 		require.Equal(t, "some-id", payload.DistinctID)
 		require.Equal(t, "some-value", payload.Remove["some-prop"])
 
@@ -755,6 +762,7 @@ func TestPeopleDeleteProperty(t *testing.T) {
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
 		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
 		require.Equal(t, "some-id", payload.DistinctID)
 		require.Equal(t, []string{"some-value"}, payload.Unset)
 
@@ -772,6 +780,7 @@ func TestPeopleDeleteProfile(t *testing.T) {
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
 		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
 		require.Equal(t, "some-id", payload.DistinctID)
 		require.Equal(t, "true", payload.IgnoreAlias)
 
@@ -780,228 +789,123 @@ func TestPeopleDeleteProfile(t *testing.T) {
 	require.NoError(t, mp.PeopleDeleteProfile(ctx, "some-id", true))
 }
 
-// func TestGroupSetProperty(t *testing.T) {
-// 	t.Run("can set group property", func(t *testing.T) {
-// 		ctx := context.Background()
+func TestGroupSetProperty(t *testing.T) {
+	ctx := context.Background()
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupSetUrl, func(body io.Reader) {
+		arrayPayload := []*groupSetPropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupSetUrl), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.Set["some-prop"])
 
-// 			var postBody []groupSetPropertyPayload
-// 			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-// 			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-// 			groupSet := postBody[0]
-// 			require.Equal(t, "token", groupSet.Token)
-// 			require.Equal(t, "group-key", groupSet.GroupKey)
-// 			require.Equal(t, "group-id", groupSet.GroupId)
-// 			require.Equal(t, "some-prop-value", groupSet.Set["some-prop-key"])
+	require.NoError(t, mp.GroupSet(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
 
-// 			body := `
-// 			1
-// 			`
+func TestGroupSetOnce(t *testing.T) {
+	ctx := context.Background()
 
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsSetOnceUrl, func(body io.Reader) {
+		arrayPayload := []*groupSetOncePropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.GroupSet(ctx, "group-key", "group-id", map[string]any{
-// 			"some-prop-key": "some-prop-value",
-// 		}))
-// 	})
-// }
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.SetOnce["some-prop"])
 
-// func TestGroupSetOnce(t *testing.T) {
-// 	t.Run("can set group property once", func(t *testing.T) {
-// 		ctx := context.Background()
+	}, peopleAndGroupSuccess())
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+	require.NoError(t, mp.GroupSetOnce(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsSetOnceUrl), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
+func TestGroupDeleteProperty(t *testing.T) {
+	ctx := context.Background()
 
-// 			var postBody []groupSetOncePropertyPayload
-// 			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-// 			require.Len(t, postBody, 1)
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsDeletePropertyUrl, func(body io.Reader) {
+		arrayPayload := []*groupDeletePropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-// 			groupUpdate := postBody[0]
-// 			require.Equal(t, "token", groupUpdate.Token)
-// 			require.Equal(t, "group-key", groupUpdate.GroupKey)
-// 			require.Equal(t, "group-id", groupUpdate.GroupId)
-// 			require.Equal(t, "some-prop-value", groupUpdate.SetOnce["some-prop-key"])
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, []string{"some-value"}, payload.Unset)
 
-// 			body := `
-// 			1
-// 			`
+	}, peopleAndGroupSuccess())
 
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+	require.NoError(t, mp.GroupDeleteProperty(ctx, "group-key", "group-id", []string{"some-value"}))
+}
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.GroupSetOnce(ctx, "group-key", "group-id", map[string]any{
-// 			"some-prop-key": "some-prop-value",
-// 		}))
-// 	})
-// }
+func TestGroupRemoveListProperty(t *testing.T) {
+	ctx := context.Background()
 
-// func TestGroupDeleteProperty(t *testing.T) {
-// 	t.Run("can delete group property", func(t *testing.T) {
-// 		ctx := context.Background()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsRemoveFromListPropertyUrl, func(body io.Reader) {
+		arrayPayload := []*groupRemoveListPropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.Remove["some-prop"])
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsDeletePropertyUrl), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
+	}, peopleAndGroupSuccess())
 
-// 			var postBody []groupDeletePropertyPayload
-// 			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-// 			require.Len(t, postBody, 1)
+	require.NoError(t, mp.GroupRemoveListProperty(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
 
-// 			groupDeleteProperty := postBody[0]
-// 			require.Equal(t, "token", groupDeleteProperty.Token)
-// 			require.Equal(t, "group-key", groupDeleteProperty.GroupKey)
-// 			require.Equal(t, "group-id", groupDeleteProperty.GroupId)
+func TestGroupUnionListProperty(t *testing.T) {
+	ctx := context.Background()
 
-// 			require.Equal(t, []string{"some-prop"}, groupDeleteProperty.Unset)
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsUnionListPropertyUrl, func(body io.Reader) {
+		arrayPayload := []*groupUnionListPropertyPayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-// 			body := `
-// 			1
-// 			`
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
+		require.Equal(t, "some-value", payload.Union["some-prop"])
 
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
+	}, peopleAndGroupSuccess())
 
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.GroupDeleteProperty(ctx, "group-key", "group-id", []string{"some-prop"}))
-// 	})
-// }
+	require.NoError(t, mp.GroupUnionListProperty(ctx, "group-key", "group-id", map[string]any{
+		"some-prop": "some-value",
+	}))
+}
 
-// func TestGroupRemoveListProperty(t *testing.T) {
-// 	t.Run("can remove list property", func(t *testing.T) {
-// 		ctx := context.Background()
+func TestGroupDelete(t *testing.T) {
+	ctx := context.Background()
 
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
+	mp := NewClient("token")
+	setupPeopleAndGroupsEndpoint(t, mp, groupsDeleteGroupUrl, func(body io.Reader) {
+		arrayPayload := []*groupDeletePayload{}
+		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
 
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsRemoveFromListPropertyUrl), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
+		payload := arrayPayload[0]
+		require.Equal(t, mp.token, payload.Token)
+		require.Equal(t, "group-key", payload.GroupKey)
+		require.Equal(t, "group-id", payload.GroupId)
 
-// 			var postBody []groupRemoveListPropertyPayload
-// 			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-// 			require.Len(t, postBody, 1)
+	}, peopleAndGroupSuccess())
 
-// 			removeList := postBody[0]
-// 			require.Equal(t, "token", removeList.Token)
-// 			require.Equal(t, "group-key", removeList.GroupKey)
-// 			require.Equal(t, "group-id", removeList.GroupId)
-
-// 			require.Equal(t, "value", removeList.Remove["list"])
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.GroupRemoveListProperty(ctx, "group-key", "group-id", map[string]any{
-// 			"list": "value",
-// 		}))
-// 	})
-// }
-
-// func TestGroupUnionListProperty(t *testing.T) {
-// 	t.Run("can union list", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsUnionListPropertyUrl), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
-
-// 			var postBody []groupUnionListPropertyPayload
-// 			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-// 			require.Len(t, postBody, 1)
-
-// 			unionList := postBody[0]
-// 			require.Equal(t, "token", unionList.Token)
-// 			require.Equal(t, "group-key", unionList.GroupKey)
-// 			require.Equal(t, "group-id", unionList.GroupId)
-
-// 			require.Equal(t, "value", unionList.Union["list"])
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.GroupUnionListProperty(ctx, "group-key", "group-id", map[string]any{
-// 			"list": "value",
-// 		}))
-// 	})
-// }
-
-// func TestGroupDelete(t *testing.T) {
-// 	t.Run("can delete group", func(t *testing.T) {
-// 		ctx := context.Background()
-
-// 		httpmock.Activate()
-// 		defer httpmock.DeactivateAndReset()
-
-// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, groupsDeleteGroupUrl), func(req *http.Request) (*http.Response, error) {
-// 			require.NoError(t, req.ParseForm())
-// 			data := req.Form.Get("data")
-
-// 			var postBody []groupDeletePayload
-// 			require.NoError(t, json.Unmarshal([]byte(data), &postBody))
-// 			require.Len(t, postBody, 1)
-
-// 			delete := postBody[0]
-// 			require.Equal(t, "token", delete.Token)
-// 			require.Equal(t, "group-key", delete.GroupKey)
-// 			require.Equal(t, "group-id", delete.GroupId)
-
-// 			body := `
-// 			1
-// 			`
-
-// 			return &http.Response{
-// 				StatusCode: http.StatusOK,
-// 				Body:       io.NopCloser(strings.NewReader(body)),
-// 			}, nil
-// 		})
-
-// 		mp := NewClient("token")
-// 		require.NoError(t, mp.GroupDelete(ctx, "group-key", "group-id"))
-// 	})
-// }
+	require.NoError(t, mp.GroupDelete(ctx, "group-key", "group-id"))
+}
