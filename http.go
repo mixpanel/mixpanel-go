@@ -16,9 +16,8 @@ import (
 type MpCompression int
 
 var (
-	None     MpCompression = 0
-	Gzip     MpCompression = 1
-	formData MpCompression = 2
+	None MpCompression = 0
+	Gzip MpCompression = 1
 )
 
 var (
@@ -165,29 +164,53 @@ type debugHttpCall struct {
 	Headers http.Header
 }
 
-func makeRequestBody(body any, compress MpCompression) (*bytes.Reader, error) {
-	var requestBody []byte
-	if body != nil {
-		jsonMarshal, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create http body: %w", err)
-		}
-		requestBody = jsonMarshal
+type requestPostPayloadType int
 
-		switch compress {
-		case Gzip:
-			requestBody, err = gzipBody(jsonMarshal)
-			if err != nil {
-				return nil, fmt.Errorf("failed to gzip body: %w", err)
-			}
-		case formData:
-			form := url.Values{}
-			form.Add("data", string(jsonMarshal))
-			requestBody = []byte(form.Encode())
-		}
+const (
+	jsonPayload requestPostPayloadType = iota
+	formPayload
+)
+
+func makeRequestBody(body any, bodyType requestPostPayloadType, compress MpCompression) (*bytes.Reader, error) {
+	if body == nil {
+		return nil, fmt.Errorf("body is nil")
 	}
 
-	return bytes.NewReader(requestBody), nil
+	var err error
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http body: %w", err)
+	}
+
+	switch bodyType {
+	case jsonPayload:
+		return requestBodyJsonCompress(jsonData, compress)
+	case formPayload:
+		return requestForm(jsonData)
+	default:
+		return nil, fmt.Errorf("unknown body type: %d", bodyType)
+	}
+}
+
+func requestBodyJsonCompress(jsonPayload []byte, compress MpCompression) (*bytes.Reader, error) {
+	switch compress {
+	case None:
+		return bytes.NewReader(jsonPayload), nil
+	case Gzip:
+		jsonData, err := gzipBody(jsonPayload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to gzip body: %w", err)
+		}
+		return bytes.NewReader(jsonData), nil
+	default:
+		return nil, fmt.Errorf("unknown compression type: %d", compress)
+	}
+}
+
+func requestForm(jsonPayload []byte) (*bytes.Reader, error) {
+	form := url.Values{}
+	form.Add("data", string(jsonPayload))
+	return bytes.NewReader([]byte(form.Encode())), nil
 }
 
 func (m *Mixpanel) doRequestBody(
@@ -219,7 +242,7 @@ func (m *Mixpanel) doRequestBody(
 }
 
 func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
-	requestBody, err := makeRequestBody(body, None)
+	requestBody, err := makeRequestBody(body, jsonPayload, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -241,7 +264,7 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) erro
 }
 
 func (m *Mixpanel) doIdentifyRequest(ctx context.Context, body any, u string, option ...httpOptions) error {
-	requestBody, err := makeRequestBody(body, formData)
+	requestBody, err := makeRequestBody(body, formPayload, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
