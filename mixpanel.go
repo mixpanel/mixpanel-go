@@ -16,7 +16,7 @@ const (
 	usDataEndpoint = "https://data.mixpanel.com"
 
 	euEndpoint     = "https://api-eu.mixpanel.com"
-	euDataEndpoint = "https://data-eu.mixpanel"
+	euDataEndpoint = "https://data-eu.mixpanel.com"
 
 	EmptyDistinctID = ""
 
