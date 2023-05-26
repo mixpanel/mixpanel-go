@@ -1,78 +1,65 @@
 package mixpanel
 
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"testing"
+// func TestAlias(t *testing.T) {
+// 	t.Run("can call alias", func(t *testing.T) {
+// 		ctx := context.Background()
 
-	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/require"
-)
+// 		httpmock.Activate()
+// 		defer httpmock.DeactivateAndReset()
 
-func TestAlias(t *testing.T) {
-	t.Run("can call alias", func(t *testing.T) {
-		ctx := context.Background()
+// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, aliasEndpoint), func(req *http.Request) (*http.Response, error) {
+// 			require.NoError(t, req.ParseForm())
+// 			data := req.Form.Get("data")
+// 			require.NotEmpty(t, data)
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+// 			aliasPost := &aliasPayload{}
+// 			require.NoError(t, json.Unmarshal([]byte(data), aliasPost))
+// 			require.Equal(t, "$create_alias", aliasPost.Event)
+// 			require.Equal(t, "distinct_id", aliasPost.Properties.DistinctId)
+// 			require.Equal(t, "alias_id", aliasPost.Properties.Alias)
+// 			require.Equal(t, "token", aliasPost.Properties.Token)
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, aliasEndpoint), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
-			require.NotEmpty(t, data)
+// 			body := `
+// 			1
+// 			`
+// 			return &http.Response{
+// 				StatusCode: http.StatusOK,
+// 				Body:       io.NopCloser(strings.NewReader(body)),
+// 			}, nil
+// 		})
 
-			aliasPost := &aliasPayload{}
-			require.NoError(t, json.Unmarshal([]byte(data), aliasPost))
-			require.Equal(t, "$create_alias", aliasPost.Event)
-			require.Equal(t, "distinct_id", aliasPost.Properties.DistinctId)
-			require.Equal(t, "alias_id", aliasPost.Properties.Alias)
-			require.Equal(t, "token", aliasPost.Properties.Token)
+// 		mp := NewClient("token")
+// 		require.NoError(t, mp.Alias(ctx, "alias_id", "distinct_id"))
+// 	})
+// }
 
-			body := `
-			1
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
+// func TestMerge(t *testing.T) {
+// 	t.Run("can call merge", func(t *testing.T) {
+// 		ctx := context.Background()
 
-		mp := NewClient("token")
-		require.NoError(t, mp.Alias(ctx, "alias_id", "distinct_id"))
-	})
-}
+// 		httpmock.Activate()
+// 		defer httpmock.DeactivateAndReset()
 
-func TestMerge(t *testing.T) {
-	t.Run("can call merge", func(t *testing.T) {
-		ctx := context.Background()
+// 		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, mergeEndpoint), func(req *http.Request) (*http.Response, error) {
+// 			require.NoError(t, req.ParseForm())
+// 			data := req.Form.Get("data")
+// 			require.NotEmpty(t, data)
 
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
+// 			mergePost := &mergePayload{}
+// 			require.NoError(t, json.Unmarshal([]byte(data), mergePost))
+// 			require.Equal(t, "$merge", mergePost.Event)
+// 			require.Equal(t, []string{"distinct_id1", "distinct_id2"}, mergePost.Properties.DistinctId)
 
-		httpmock.RegisterResponder(http.MethodPost, fmt.Sprintf("%s%s", usEndpoint, mergeEndpoint), func(req *http.Request) (*http.Response, error) {
-			require.NoError(t, req.ParseForm())
-			data := req.Form.Get("data")
-			require.NotEmpty(t, data)
+// 			body := `
+// 			1
+// 			`
+// 			return &http.Response{
+// 				StatusCode: http.StatusOK,
+// 				Body:       io.NopCloser(strings.NewReader(body)),
+// 			}, nil
+// 		})
 
-			mergePost := &mergePayload{}
-			require.NoError(t, json.Unmarshal([]byte(data), mergePost))
-			require.Equal(t, "$merge", mergePost.Event)
-			require.Equal(t, []string{"distinct_id1", "distinct_id2"}, mergePost.Properties.DistinctId)
-
-			body := `
-			1
-			`
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(body)),
-			}, nil
-		})
-
-		mp := NewClient("token")
-		require.NoError(t, mp.Merge(ctx, "distinct_id1", "distinct_id2"))
-	})
-}
+// 		mp := NewClient("token")
+// 		require.NoError(t, mp.Merge(ctx, "distinct_id1", "distinct_id2"))
+// 	})
+// }

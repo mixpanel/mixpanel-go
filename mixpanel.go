@@ -35,7 +35,7 @@ const (
 	acceptJsonHeader           = "application/json"
 	contentEncodingHeader      = "Content-Encoding"
 	contentTypeHeader          = "Content-Type"
-	contentTypeApplicationJson = " application/json"
+	contentTypeApplicationJson = "application/json"
 	contentTypeApplicationForm = "application/x-www-form-urlencoded"
 )
 
@@ -44,23 +44,23 @@ type Ingestion interface {
 	Track(ctx context.Context, events []*Event) error
 	Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error)
 
-	// People
-	PeopleSet(ctx context.Context, people []*PeopleProperties) error
-	PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error
-	PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error
-	PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error
-	PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error
-	PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error
-	PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error
-	PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error
+	// // People
+	// PeopleSet(ctx context.Context, people []*PeopleProperties) error
+	// PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error
+	// PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error
+	// PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error
+	// PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error
+	// PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error
+	// PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error
+	// PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error
 
-	// Groups
-	GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error
-	GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error
-	GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error
-	GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error
-	GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error
-	GroupDelete(ctx context.Context, groupKey, groupID string) error
+	// // Groups
+	// GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error
+	// GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error
+	// GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error
+	// GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error
+	// GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error
+	// GroupDelete(ctx context.Context, groupKey, groupID string) error
 }
 
 var _ Ingestion = (*Mixpanel)(nil)
@@ -72,8 +72,8 @@ type Export interface {
 var _ Export = (*Mixpanel)(nil)
 
 type Identity interface {
-	Alias(ctx context.Context, distinctID, aliasID string) error
-	Merge(ctx context.Context, distinctID1, distinctID2 string) error
+	// Alias(ctx context.Context, distinctID, aliasID string) error
+	// Merge(ctx context.Context, distinctID1, distinctID2 string) error
 }
 
 var _ Identity = (*Mixpanel)(nil)

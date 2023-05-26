@@ -165,7 +165,7 @@ type debugHttpCall struct {
 	Headers http.Header
 }
 
-func requestBody(body any, compress MpCompression) (*bytes.Reader, error) {
+func makeRequestBody(body any, compress MpCompression) (*bytes.Reader, error) {
 	var requestBody []byte
 	if body != nil {
 		jsonMarshal, err := json.Marshal(body)
@@ -218,8 +218,8 @@ func (m *Mixpanel) doRequestBody(
 	return m.client.Do(request)
 }
 
-func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, compress MpCompression, options ...httpOptions) error {
-	requestBody, err := requestBody(body, formData)
+func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string) error {
+	requestBody, err := makeRequestBody(body, formData)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -229,7 +229,8 @@ func (m *Mixpanel) doPeopleRequest(ctx context.Context, body any, u string, comp
 		http.MethodPost,
 		m.apiEndpoint+u,
 		requestBody,
-		options...,
+		acceptPlainText(),
+		applicationFormData(),
 	)
 
 	if err != nil {

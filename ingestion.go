@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -55,7 +54,7 @@ func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
 	query := url.Values{}
 	query.Add("verbose", "1")
 
-	body, err := requestBody(events, None)
+	body, err := makeRequestBody(events, None)
 	if err != nil {
 		return fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -140,7 +139,7 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	values.Add("project_id", strconv.Itoa(m.projectID))
 	values.Add("verbose", "1")
 
-	body, err := requestBody(events, options.Compression)
+	body, err := makeRequestBody(events, options.Compression)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request body: %w", err)
 	}
@@ -192,342 +191,342 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	}
 }
 
-type PeopleReveredProperties string
+// type PeopleReveredProperties string
 
-const (
-	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
+// const (
+// 	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
 
-	PeopleEmailProperty           PeopleReveredProperties = "$email"
-	PeoplePhoneProperty           PeopleReveredProperties = "$phone"
-	PeopleFirstNameProperty       PeopleReveredProperties = "$first_name"
-	PeopleLastNameProperty        PeopleReveredProperties = "$last_name"
-	PeopleNameProperty            PeopleReveredProperties = "$name"
-	PeopleAvatarProperty          PeopleReveredProperties = "$avatar"
-	PeopleCreatedProperty         PeopleReveredProperties = "$created"
-	PeopleCityProperty            PeopleReveredProperties = "$city"
-	PeopleRegionProperty          PeopleReveredProperties = "$region"
-	PeopleCountryCodeProperty     PeopleReveredProperties = "$country_code"
-	PeopleTimezoneProperty        PeopleReveredProperties = "$timezone"
-	PeopleBucketProperty          PeopleReveredProperties = "$bucket"
-	PeopleGeolocationByIpProperty PeopleReveredProperties = "$ip"
-)
+// 	PeopleEmailProperty           PeopleReveredProperties = "$email"
+// 	PeoplePhoneProperty           PeopleReveredProperties = "$phone"
+// 	PeopleFirstNameProperty       PeopleReveredProperties = "$first_name"
+// 	PeopleLastNameProperty        PeopleReveredProperties = "$last_name"
+// 	PeopleNameProperty            PeopleReveredProperties = "$name"
+// 	PeopleAvatarProperty          PeopleReveredProperties = "$avatar"
+// 	PeopleCreatedProperty         PeopleReveredProperties = "$created"
+// 	PeopleCityProperty            PeopleReveredProperties = "$city"
+// 	PeopleRegionProperty          PeopleReveredProperties = "$region"
+// 	PeopleCountryCodeProperty     PeopleReveredProperties = "$country_code"
+// 	PeopleTimezoneProperty        PeopleReveredProperties = "$timezone"
+// 	PeopleBucketProperty          PeopleReveredProperties = "$bucket"
+// 	PeopleGeolocationByIpProperty PeopleReveredProperties = "$ip"
+// )
 
-type peopleSetPayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	Set        map[string]any `json:"$set"`
-}
+// type peopleSetPayload struct {
+// 	Token      string         `json:"$token"`
+// 	DistinctID string         `json:"$distinct_id"`
+// 	Set        map[string]any `json:"$set"`
+// }
 
-type PeopleProperties struct {
-	DistinctID string
-	Properties map[string]any
-}
+// type PeopleProperties struct {
+// 	DistinctID string
+// 	Properties map[string]any
+// }
 
-func NewPeopleProperties(distinctID string, properties map[string]any) *PeopleProperties {
-	var prop = properties
-	if prop == nil {
-		prop = make(map[string]any)
-	}
+// func NewPeopleProperties(distinctID string, properties map[string]any) *PeopleProperties {
+// 	var prop = properties
+// 	if prop == nil {
+// 		prop = make(map[string]any)
+// 	}
 
-	return &PeopleProperties{
-		DistinctID: distinctID,
-		Properties: prop,
-	}
-}
+// 	return &PeopleProperties{
+// 		DistinctID: distinctID,
+// 		Properties: prop,
+// 	}
+// }
 
-func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties, value any) {
-	p.Properties[string(property)] = value
-}
+// func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties, value any) {
+// 	p.Properties[string(property)] = value
+// }
 
-func (p *PeopleProperties) SetIp(ip net.IP) {
-	if ip == nil {
-		return
-	}
+// func (p *PeopleProperties) SetIp(ip net.IP) {
+// 	if ip == nil {
+// 		return
+// 	}
 
-	p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
-}
+// 	p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
+// }
 
-// PeopleSet calls the User Set Property API
-// https://developer.mixpanel.com/reference/profile-set
-func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
-	if len(people) > MaxPeopleEvents {
-		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
-	}
+// // PeopleSet calls the User Set Property API
+// // https://developer.mixpanel.com/reference/profile-set
+// func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
+// 	if len(people) > MaxPeopleEvents {
+// 		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
+// 	}
 
-	payloads := make([]peopleSetPayload, len(people))
-	for i, p := range people {
-		payloads[i] = peopleSetPayload{
-			Token:      m.token,
-			DistinctID: p.DistinctID,
-			Set:        p.Properties,
-		}
-	}
-	return m.doPeopleRequest(ctx, payloads, peopleSetURL, None)
-}
+// 	payloads := make([]peopleSetPayload, len(people))
+// 	for i, p := range people {
+// 		payloads[i] = peopleSetPayload{
+// 			Token:      m.token,
+// 			DistinctID: p.DistinctID,
+// 			Set:        p.Properties,
+// 		}
+// 	}
+// 	return m.doPeopleRequest(ctx, payloads, peopleSetURL, None)
+// }
 
-type peopleSetOncePayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	SetOnce    map[string]any `json:"$set_once"`
-}
+// type peopleSetOncePayload struct {
+// 	Token      string         `json:"$token"`
+// 	DistinctID string         `json:"$distinct_id"`
+// 	SetOnce    map[string]any `json:"$set_once"`
+// }
 
-// PeopleSetOnce calls the User Set Property Once API
-// https://developer.mixpanel.com/reference/profile-set-property-once
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
-	if len(people) > MaxPeopleEvents {
-		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
-	}
+// // PeopleSetOnce calls the User Set Property Once API
+// // https://developer.mixpanel.com/reference/profile-set-property-once
+// func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
+// 	if len(people) > MaxPeopleEvents {
+// 		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
+// 	}
 
-	payloads := make([]peopleSetOncePayload, len(people))
-	for i, p := range people {
-		payloads[i] = peopleSetOncePayload{
-			Token:      m.token,
-			DistinctID: p.DistinctID,
-			SetOnce:    p.Properties,
-		}
-	}
-	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL, None)
-}
+// 	payloads := make([]peopleSetOncePayload, len(people))
+// 	for i, p := range people {
+// 		payloads[i] = peopleSetOncePayload{
+// 			Token:      m.token,
+// 			DistinctID: p.DistinctID,
+// 			SetOnce:    p.Properties,
+// 		}
+// 	}
+// 	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL, None)
+// }
 
-type peopleNumericalAddPayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	Add        map[string]int `json:"$add"`
-}
+// type peopleNumericalAddPayload struct {
+// 	Token      string         `json:"$token"`
+// 	DistinctID string         `json:"$distinct_id"`
+// 	Add        map[string]int `json:"$add"`
+// }
 
-// PeopleIncrement calls the User Increment Numerical Property API
-// https://developer.mixpanel.com/reference/profile-numerical-add
-func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
-	payload := []peopleNumericalAddPayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			Add:        add,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl, None)
-}
+// // PeopleIncrement calls the User Increment Numerical Property API
+// // https://developer.mixpanel.com/reference/profile-numerical-add
+// func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
+// 	payload := []peopleNumericalAddPayload{
+// 		{
+// 			Token:      m.token,
+// 			DistinctID: distinctID,
+// 			Add:        add,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl, None)
+// }
 
-type peopleUnionPayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	Union      map[string]any `json:"$union"`
-}
+// type peopleUnionPayload struct {
+// 	Token      string         `json:"$token"`
+// 	DistinctID string         `json:"$distinct_id"`
+// 	Union      map[string]any `json:"$union"`
+// }
 
-// PeopleUnionProperty calls User Union To List Property API
-// https://developer.mixpanel.com/reference/user-profile-union
-func (m *Mixpanel) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
-	payload := []peopleUnionPayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			Union:      union,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, peopleUnionToListUrl, None)
-}
+// // PeopleUnionProperty calls User Union To List Property API
+// // https://developer.mixpanel.com/reference/user-profile-union
+// func (m *Mixpanel) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
+// 	payload := []peopleUnionPayload{
+// 		{
+// 			Token:      m.token,
+// 			DistinctID: distinctID,
+// 			Union:      union,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, peopleUnionToListUrl, None)
+// }
 
-type peopleAppendListPayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	Append     map[string]any `json:"$append"`
-}
+// type peopleAppendListPayload struct {
+// 	Token      string         `json:"$token"`
+// 	DistinctID string         `json:"$distinct_id"`
+// 	Append     map[string]any `json:"$append"`
+// }
 
-// PeopleAppend calls the Increment Numerical Property
-// https://developer.mixpanel.com/reference/profile-numerical-add
-func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error {
-	payload := []peopleAppendListPayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			Append:     append,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl, None)
-}
+// // PeopleAppend calls the Increment Numerical Property
+// // https://developer.mixpanel.com/reference/profile-numerical-add
+// func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error {
+// 	payload := []peopleAppendListPayload{
+// 		{
+// 			Token:      m.token,
+// 			DistinctID: distinctID,
+// 			Append:     append,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl, None)
+// }
 
-type peopleListRemovePayload struct {
-	Token      string         `json:"$token"`
-	DistinctID string         `json:"$distinct_id"`
-	Remove     map[string]any `json:"$remove"`
-}
+// type peopleListRemovePayload struct {
+// 	Token      string         `json:"$token"`
+// 	DistinctID string         `json:"$distinct_id"`
+// 	Remove     map[string]any `json:"$remove"`
+// }
 
-// PeopleRemoveListProperty calls the User Remove from List Property API
-// https://developer.mixpanel.com/reference/profile-remove-from-list-property
-func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
-	payload := []peopleListRemovePayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			Remove:     remove,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl, None)
-}
+// // PeopleRemoveListProperty calls the User Remove from List Property API
+// // https://developer.mixpanel.com/reference/profile-remove-from-list-property
+// func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
+// 	payload := []peopleListRemovePayload{
+// 		{
+// 			Token:      m.token,
+// 			DistinctID: distinctID,
+// 			Remove:     remove,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl, None)
+// }
 
-type peopleDeletePropertyPayload struct {
-	Token      string   `json:"$token"`
-	DistinctID string   `json:"$distinct_id"`
-	Unset      []string `json:"$unset"`
-}
+// type peopleDeletePropertyPayload struct {
+// 	Token      string   `json:"$token"`
+// 	DistinctID string   `json:"$distinct_id"`
+// 	Unset      []string `json:"$unset"`
+// }
 
-// PeopleDeleteProperty calls the User Delete Property API
-// https://developer.mixpanel.com/reference/profile-delete-property
-func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
-	payload := []peopleDeletePropertyPayload{
-		{
-			Token:      m.token,
-			DistinctID: distinctID,
-			Unset:      unset,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl, None)
-}
+// // PeopleDeleteProperty calls the User Delete Property API
+// // https://developer.mixpanel.com/reference/profile-delete-property
+// func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
+// 	payload := []peopleDeletePropertyPayload{
+// 		{
+// 			Token:      m.token,
+// 			DistinctID: distinctID,
+// 			Unset:      unset,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl, None)
+// }
 
-type peopleDeleteProfilePayload struct {
-	Token       string `json:"$token"`
-	DistinctID  string `json:"$distinct_id"`
-	Delete      string `json:"$delete"`
-	IgnoreAlias string `json:"$ignore_alias"`
-}
+// type peopleDeleteProfilePayload struct {
+// 	Token       string `json:"$token"`
+// 	DistinctID  string `json:"$distinct_id"`
+// 	Delete      string `json:"$delete"`
+// 	IgnoreAlias string `json:"$ignore_alias"`
+// }
 
-// PeopleDeleteProfile calls the User Delete Profile API
-// https://developer.mixpanel.com/reference/delete-profile
-func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
-	payload := []peopleDeleteProfilePayload{
-		{
-			Token:       m.token,
-			DistinctID:  distinctID,
-			Delete:      "null", // The $delete object value is ignored - the profile is determined by the $distinct_id from the request itself.
-			IgnoreAlias: strconv.FormatBool(ignoreAlias),
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl, None)
-}
+// // PeopleDeleteProfile calls the User Delete Profile API
+// // https://developer.mixpanel.com/reference/delete-profile
+// func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
+// 	payload := []peopleDeleteProfilePayload{
+// 		{
+// 			Token:       m.token,
+// 			DistinctID:  distinctID,
+// 			Delete:      "null", // The $delete object value is ignored - the profile is determined by the $distinct_id from the request itself.
+// 			IgnoreAlias: strconv.FormatBool(ignoreAlias),
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl, None)
+// }
 
-type groupSetPropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Set      map[string]any `json:"$set"`
-}
+// type groupSetPropertyPayload struct {
+// 	Token    string         `json:"$token"`
+// 	GroupKey string         `json:"$group_key"`
+// 	GroupId  string         `json:"$group_id"`
+// 	Set      map[string]any `json:"$set"`
+// }
 
-// GroupUpdateProperty calls the Group Update Property API
-// https://developer.mixpanel.com/reference/group-set-property
-func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
-	payload := []groupSetPropertyPayload{
-		{
-			Token:    m.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Set:      set,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, groupSetUrl, formData, acceptPlainText(), applicationFormData())
-}
+// // GroupUpdateProperty calls the Group Update Property API
+// // https://developer.mixpanel.com/reference/group-set-property
+// func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+// 	payload := []groupSetPropertyPayload{
+// 		{
+// 			Token:    m.token,
+// 			GroupKey: groupKey,
+// 			GroupId:  groupID,
+// 			Set:      set,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, groupSetUrl, formData, acceptPlainText(), applicationFormData())
+// }
 
-type groupSetOncePropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	SetOnce  map[string]any `json:"$set_once"`
-}
+// type groupSetOncePropertyPayload struct {
+// 	Token    string         `json:"$token"`
+// 	GroupKey string         `json:"$group_key"`
+// 	GroupId  string         `json:"$group_id"`
+// 	SetOnce  map[string]any `json:"$set_once"`
+// }
 
-// GroupSetOnce calls the Group Set Property Once API
-// https://developer.mixpanel.com/reference/group-set-property-once
-func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
-	payload := []groupSetOncePropertyPayload{
-		{
-			Token:    m.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			SetOnce:  set,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, formData, acceptPlainText(), applicationFormData())
-}
+// // GroupSetOnce calls the Group Set Property Once API
+// // https://developer.mixpanel.com/reference/group-set-property-once
+// func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+// 	payload := []groupSetOncePropertyPayload{
+// 		{
+// 			Token:    m.token,
+// 			GroupKey: groupKey,
+// 			GroupId:  groupID,
+// 			SetOnce:  set,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl, formData, acceptPlainText(), applicationFormData())
+// }
 
-type groupDeletePropertyPayload struct {
-	Token    string   `json:"$token"`
-	GroupKey string   `json:"$group_key"`
-	GroupId  string   `json:"$group_id"`
-	Unset    []string `json:"$unset"`
-}
+// type groupDeletePropertyPayload struct {
+// 	Token    string   `json:"$token"`
+// 	GroupKey string   `json:"$group_key"`
+// 	GroupId  string   `json:"$group_id"`
+// 	Unset    []string `json:"$unset"`
+// }
 
-// GroupDeleteProperty calls the group delete property API
-// https://developer.mixpanel.com/reference/group-delete-property
-func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
-	payload := []groupDeletePropertyPayload{
-		{
-			Token:    m.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Unset:    unset,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, formData, acceptPlainText(), applicationFormData())
-}
+// // GroupDeleteProperty calls the group delete property API
+// // https://developer.mixpanel.com/reference/group-delete-property
+// func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
+// 	payload := []groupDeletePropertyPayload{
+// 		{
+// 			Token:    m.token,
+// 			GroupKey: groupKey,
+// 			GroupId:  groupID,
+// 			Unset:    unset,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl, formData, acceptPlainText(), applicationFormData())
+// }
 
-type groupRemoveListPropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Remove   map[string]any `json:"$remove"`
-}
+// type groupRemoveListPropertyPayload struct {
+// 	Token    string         `json:"$token"`
+// 	GroupKey string         `json:"$group_key"`
+// 	GroupId  string         `json:"$group_id"`
+// 	Remove   map[string]any `json:"$remove"`
+// }
 
-// GroupRemoveListProperty calls the Groups Remove from List Property API
-// https://developer.mixpanel.com/reference/group-remove-from-list-property
-func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
-	payload := []groupRemoveListPropertyPayload{
-		{
-			Token:    m.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Remove:   remove,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl, formData, acceptPlainText(), applicationFormData())
-}
+// // GroupRemoveListProperty calls the Groups Remove from List Property API
+// // https://developer.mixpanel.com/reference/group-remove-from-list-property
+// func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
+// 	payload := []groupRemoveListPropertyPayload{
+// 		{
+// 			Token:    m.token,
+// 			GroupKey: groupKey,
+// 			GroupId:  groupID,
+// 			Remove:   remove,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl, formData, acceptPlainText(), applicationFormData())
+// }
 
-type groupUnionListPropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Union    map[string]any `json:"$union"`
-}
+// type groupUnionListPropertyPayload struct {
+// 	Token    string         `json:"$token"`
+// 	GroupKey string         `json:"$group_key"`
+// 	GroupId  string         `json:"$group_id"`
+// 	Union    map[string]any `json:"$union"`
+// }
 
-// GroupUnionListProperty calls the Groups Remove from Union Property API
-// https://developer.mixpanel.com/reference/group-union
-func (m *Mixpanel) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
-	payload := []groupUnionListPropertyPayload{
-		{
-			Token:    m.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Union:    union,
-		},
-	}
-	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl, formData, acceptPlainText(), applicationFormData())
-}
+// // GroupUnionListProperty calls the Groups Remove from Union Property API
+// // https://developer.mixpanel.com/reference/group-union
+// func (m *Mixpanel) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
+// 	payload := []groupUnionListPropertyPayload{
+// 		{
+// 			Token:    m.token,
+// 			GroupKey: groupKey,
+// 			GroupId:  groupID,
+// 			Union:    union,
+// 		},
+// 	}
+// 	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl, formData, acceptPlainText(), applicationFormData())
+// }
 
-type groupDeletePayload struct {
-	Token    string `json:"$token"`
-	GroupKey string `json:"$group_key"`
-	GroupId  string `json:"$group_id"`
-	Delete   string `json:"$delete"`
-}
+// type groupDeletePayload struct {
+// 	Token    string `json:"$token"`
+// 	GroupKey string `json:"$group_key"`
+// 	GroupId  string `json:"$group_id"`
+// 	Delete   string `json:"$delete"`
+// }
 
-// GroupDelete calls the Groups Delete API
-// https://developer.mixpanel.com/reference/delete-group
-func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) error {
-	payload := []groupDeletePayload{
-		{
-			Token:    m.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Delete:   "null",
-		},
-	}
+// // GroupDelete calls the Groups Delete API
+// // https://developer.mixpanel.com/reference/delete-group
+// func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) error {
+// 	payload := []groupDeletePayload{
+// 		{
+// 			Token:    m.token,
+// 			GroupKey: groupKey,
+// 			GroupId:  groupID,
+// 			Delete:   "null",
+// 		},
+// 	}
 
-	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, formData, acceptPlainText(), applicationFormData())
-}
+// 	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl, formData, acceptPlainText(), applicationFormData())
+// }
