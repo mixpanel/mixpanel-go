@@ -63,24 +63,24 @@ type Ingestion interface {
 	GroupDelete(ctx context.Context, groupKey, groupID string) error
 }
 
-var _ Ingestion = (*Mixpanel)(nil)
+var _ Ingestion = (*ApiClient)(nil)
 
 type Export interface {
 	Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error)
 }
 
-var _ Export = (*Mixpanel)(nil)
+var _ Export = (*ApiClient)(nil)
 
 type Identity interface {
 	Alias(ctx context.Context, distinctID, aliasID string) error
 	Merge(ctx context.Context, distinctID1, distinctID2 string) error
 }
 
-var _ Identity = (*Mixpanel)(nil)
+var _ Identity = (*ApiClient)(nil)
 
-// MpApi is all the API's in the Mixpanel docs
+// Api is all the API's in the Mixpanel docs
 // https://developer.mixpanel.com/reference/overview
-type MpApi interface {
+type Api interface {
 	Ingestion
 	Export
 	Identity
@@ -91,7 +91,7 @@ type serviceAccount struct {
 	Secret   string
 }
 
-type Mixpanel struct {
+type ApiClient struct {
 	client       *http.Client
 	apiEndpoint  string
 	dataEndpoint string
@@ -104,23 +104,17 @@ type Mixpanel struct {
 	debugHttpCall  *debugHttpCalls
 }
 
-type Options func(mixpanel *Mixpanel)
-
-func ProjectID(projectID int) Options {
-	return func(mixpanel *Mixpanel) {
-		mixpanel.projectID = projectID
-	}
-}
+type Options func(mixpanel *ApiClient)
 
 func ApiSecret(apiSecret string) Options {
-	return func(mixpanel *Mixpanel) {
+	return func(mixpanel *ApiClient) {
 		mixpanel.apiSecret = apiSecret
 	}
 }
 
 // HttpClient will replace the http.DefaultClient with the provided http.Client
 func HttpClient(client *http.Client) Options {
-	return func(mixpanel *Mixpanel) {
+	return func(mixpanel *ApiClient) {
 		mixpanel.client = client
 	}
 }
@@ -128,7 +122,7 @@ func HttpClient(client *http.Client) Options {
 // EuResidency sets the mixpanel client to use the eu endpoints
 // Use for EU Projects
 func EuResidency() Options {
-	return func(mixpanel *Mixpanel) {
+	return func(mixpanel *ApiClient) {
 		mixpanel.apiEndpoint = euEndpoint
 		mixpanel.dataEndpoint = euDataEndpoint
 	}
@@ -137,7 +131,7 @@ func EuResidency() Options {
 // ProxyApiLocation sets the mixpanel client to use the custom location for all ingestion requests
 // Example: http://locahosthost:8080
 func ProxyApiLocation(proxy string) Options {
-	return func(mixpanel *Mixpanel) {
+	return func(mixpanel *ApiClient) {
 		mixpanel.apiEndpoint = proxy
 	}
 }
@@ -145,15 +139,16 @@ func ProxyApiLocation(proxy string) Options {
 // ProxyDataLocation sets the mixpanel client to use the custom location for all data requests
 // Example: http://locahosthost:8080
 func ProxyDataLocation(proxy string) Options {
-	return func(mixpanel *Mixpanel) {
+	return func(mixpanel *ApiClient) {
 		mixpanel.dataEndpoint = proxy
 	}
 }
 
 // ServiceAccount add a service account to the mixpanel client
 // https://developer.mixpanel.com/reference/service-accounts-api
-func ServiceAccount(username, secret string) Options {
-	return func(mixpanel *Mixpanel) {
+func ServiceAccount(projectID int, username, secret string) Options {
+	return func(mixpanel *ApiClient) {
+		mixpanel.projectID = projectID
 		mixpanel.serviceAccount = &serviceAccount{
 			Username: username,
 			Secret:   secret,
@@ -163,7 +158,7 @@ func ServiceAccount(username, secret string) Options {
 
 // DebugHttpCalls streams json payload information and url information for debugging purposes
 func DebugHttpCalls(writer io.Writer) Options {
-	return func(mixpanel *Mixpanel) {
+	return func(mixpanel *ApiClient) {
 		mixpanel.debugHttpCall = &debugHttpCalls{
 			writer: writer,
 		}
@@ -171,8 +166,8 @@ func DebugHttpCalls(writer io.Writer) Options {
 }
 
 // NewClient create a new mixpanel client
-func NewClient(token string, options ...Options) *Mixpanel {
-	mp := &Mixpanel{
+func NewClient(token string, options ...Options) *ApiClient {
+	mp := &ApiClient{
 		client:        http.DefaultClient,
 		apiEndpoint:   usEndpoint,
 		dataEndpoint:  usDataEndpoint,
@@ -194,7 +189,7 @@ type Event struct {
 }
 
 // NewEvent creates a new mixpanel event to track
-func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[string]any) *Event {
+func (m *ApiClient) NewEvent(name string, distinctID string, properties map[string]any) *Event {
 	e := &Event{
 		Name: name,
 	}
@@ -211,7 +206,7 @@ func (m *Mixpanel) NewEvent(name string, distinctID string, properties map[strin
 	return e
 }
 
-func (m *Mixpanel) NewEventFromJson(json map[string]any) (*Event, error) {
+func (m *ApiClient) NewEventFromJson(json map[string]any) (*Event, error) {
 	name, ok := json["event"].(string)
 	if !ok {
 		return nil, errors.New("event name is not a string or is missing")

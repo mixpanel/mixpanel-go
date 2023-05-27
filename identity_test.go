@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupIdentityEndpoint(t *testing.T, client *Mixpanel, endpoint string, testReq func(req *http.Request), testPayload func(body io.Reader), httpResponse *http.Response) {
+func setupIdentityEndpoint(t *testing.T, client *ApiClient, endpoint string, testReq func(req *http.Request), testPayload func(body io.Reader), httpResponse *http.Response) {
 	httpmock.Activate()
 	t.Cleanup(httpmock.DeactivateAndReset)
 

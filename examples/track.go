@@ -13,8 +13,7 @@ func Track() error {
 	// fill in your token and project id and service account user name and secret
 	mp := mixpanel.NewClient(
 		"token",
-		mixpanel.ProjectID(0),
-		mixpanel.ServiceAccount("user_name", "secret"),
+		mixpanel.ServiceAccount(0, "user_name", "secret"),
 	)
 
 	if err := mp.Track(ctx, []*mixpanel.Event{

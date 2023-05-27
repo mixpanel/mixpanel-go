@@ -14,19 +14,15 @@ func TestMixpanelOptions(t *testing.T) {
 		require.Equal(t, mp.dataEndpoint, euDataEndpoint)
 	})
 
-	t.Run("project id", func(t *testing.T) {
-		mp := NewClient("", ProjectID(117))
-		require.Equal(t, 117, mp.projectID)
-	})
-
 	t.Run("api secret", func(t *testing.T) {
 		mp := NewClient("", ApiSecret("api-secret"))
 		require.Equal(t, "api-secret", mp.apiSecret)
 	})
 
 	t.Run("service account", func(t *testing.T) {
-		mp := NewClient("", ServiceAccount("username", "secret"))
+		mp := NewClient("", ServiceAccount(117, "username", "secret"))
 		require.NotNil(t, mp.serviceAccount)
+		require.Equal(t, 117, mp.projectID)
 		require.Equal(t, "username", mp.serviceAccount.Username)
 		require.Equal(t, "secret", mp.serviceAccount.Secret)
 	})

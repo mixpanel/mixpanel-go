@@ -47,7 +47,7 @@ const (
 // Track calls the Track endpoint
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
-func (m *Mixpanel) Track(ctx context.Context, events []*Event) error {
+func (m *ApiClient) Track(ctx context.Context, events []*Event) error {
 	if len(events) > MaxTrackEvents {
 		return fmt.Errorf("max track events is %d", MaxTrackEvents)
 	}
@@ -127,7 +127,7 @@ func (e ImportGenericError) Error() string {
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
 // Need to provide project id and api secret or service account
-func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
+func (a *ApiClient) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
 	if len(events) > MaxImportEvents {
 		return nil, fmt.Errorf("max import events is %d", MaxImportEvents)
 	}
@@ -138,7 +138,10 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 	} else {
 		values.Add("strict", "0")
 	}
-	values.Add("project_id", strconv.Itoa(m.projectID))
+
+	if a.serviceAccount != nil {
+		values.Add("project_id", strconv.Itoa(a.projectID))
+	}
 	values.Add("verbose", "1")
 
 	body, err := makeRequestBody(events, jsonPayload, options.Compression)
@@ -146,15 +149,15 @@ func (m *Mixpanel) Import(ctx context.Context, events []*Event, options ImportOp
 		return nil, fmt.Errorf("failed to create request body: %w", err)
 	}
 
-	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), m.useServiceAccountOrProjectSecret()}
+	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), a.useServiceAccountOrProjectSecret()}
 	if options.Compression == Gzip {
 		httpOptions = append(httpOptions, gzipHeader())
 	}
 
-	httpResponse, err := m.doRequestBody(
+	httpResponse, err := a.doRequestBody(
 		ctx,
 		http.MethodPost,
-		m.apiEndpoint+importURL,
+		a.apiEndpoint+importURL,
 		body,
 		httpOptions...,
 	)
@@ -250,7 +253,7 @@ type peopleSetPayload struct {
 
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
-func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
+func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
 	if len(people) > MaxPeopleEvents {
 		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
 	}
@@ -258,12 +261,12 @@ func (m *Mixpanel) PeopleSet(ctx context.Context, people []*PeopleProperties) er
 	payloads := make([]peopleSetPayload, len(people))
 	for i, p := range people {
 		payloads[i] = peopleSetPayload{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: p.DistinctID,
 			Set:        p.Properties,
 		}
 	}
-	return m.doPeopleRequest(ctx, payloads, peopleSetURL)
+	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
 }
 
 type peopleSetOncePayload struct {
@@ -274,7 +277,7 @@ type peopleSetOncePayload struct {
 
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
-func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
+func (a *ApiClient) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
 	if len(people) > MaxPeopleEvents {
 		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
 	}
@@ -282,12 +285,12 @@ func (m *Mixpanel) PeopleSetOnce(ctx context.Context, people []*PeopleProperties
 	payloads := make([]peopleSetOncePayload, len(people))
 	for i, p := range people {
 		payloads[i] = peopleSetOncePayload{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: p.DistinctID,
 			SetOnce:    p.Properties,
 		}
 	}
-	return m.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
+	return a.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
 }
 
 type peopleNumericalAddPayload struct {
@@ -298,15 +301,15 @@ type peopleNumericalAddPayload struct {
 
 // PeopleIncrement calls the User Increment Numerical Property API
 // https://developer.mixpanel.com/reference/profile-numerical-add
-func (m *Mixpanel) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
+func (a *ApiClient) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
 	payload := []peopleNumericalAddPayload{
 		{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: distinctID,
 			Add:        add,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleIncrementUrl)
+	return a.doPeopleRequest(ctx, payload, peopleIncrementUrl)
 }
 
 type peopleUnionPayload struct {
@@ -317,15 +320,15 @@ type peopleUnionPayload struct {
 
 // PeopleUnionProperty calls User Union To List Property API
 // https://developer.mixpanel.com/reference/user-profile-union
-func (m *Mixpanel) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
+func (a *ApiClient) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
 	payload := []peopleUnionPayload{
 		{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: distinctID,
 			Union:      union,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleUnionToListUrl)
+	return a.doPeopleRequest(ctx, payload, peopleUnionToListUrl)
 }
 
 type peopleAppendListPayload struct {
@@ -336,15 +339,15 @@ type peopleAppendListPayload struct {
 
 // PeopleAppend calls the Increment Numerical Property
 // https://developer.mixpanel.com/reference/profile-numerical-add
-func (m *Mixpanel) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error {
+func (a *ApiClient) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error {
 	payload := []peopleAppendListPayload{
 		{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: distinctID,
 			Append:     append,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
+	return a.doPeopleRequest(ctx, payload, peopleAppendToListUrl)
 }
 
 type peopleListRemovePayload struct {
@@ -355,15 +358,15 @@ type peopleListRemovePayload struct {
 
 // PeopleRemoveListProperty calls the User Remove from List Property API
 // https://developer.mixpanel.com/reference/profile-remove-from-list-property
-func (m *Mixpanel) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
+func (a *ApiClient) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
 	payload := []peopleListRemovePayload{
 		{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: distinctID,
 			Remove:     remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
+	return a.doPeopleRequest(ctx, payload, peopleRemoveFromListUrl)
 }
 
 type peopleDeletePropertyPayload struct {
@@ -374,15 +377,15 @@ type peopleDeletePropertyPayload struct {
 
 // PeopleDeleteProperty calls the User Delete Property API
 // https://developer.mixpanel.com/reference/profile-delete-property
-func (m *Mixpanel) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
+func (a *ApiClient) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
 	payload := []peopleDeletePropertyPayload{
 		{
-			Token:      m.token,
+			Token:      a.token,
 			DistinctID: distinctID,
 			Unset:      unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
+	return a.doPeopleRequest(ctx, payload, peopleDeletePropertyUrl)
 }
 
 type peopleDeleteProfilePayload struct {
@@ -394,16 +397,16 @@ type peopleDeleteProfilePayload struct {
 
 // PeopleDeleteProfile calls the User Delete Profile API
 // https://developer.mixpanel.com/reference/delete-profile
-func (m *Mixpanel) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
+func (a *ApiClient) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
 	payload := []peopleDeleteProfilePayload{
 		{
-			Token:       m.token,
+			Token:       a.token,
 			DistinctID:  distinctID,
 			Delete:      "null", // The $delete object value is ignored - the profile is determined by the $distinct_id from the request itself.
 			IgnoreAlias: strconv.FormatBool(ignoreAlias),
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
+	return a.doPeopleRequest(ctx, payload, peopleDeleteProfileUrl)
 }
 
 type groupSetPropertyPayload struct {
@@ -415,16 +418,16 @@ type groupSetPropertyPayload struct {
 
 // GroupUpdateProperty calls the Group Update Property API
 // https://developer.mixpanel.com/reference/group-set-property
-func (m *Mixpanel) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+func (a *ApiClient) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	payload := []groupSetPropertyPayload{
 		{
-			Token:    m.token,
+			Token:    a.token,
 			GroupKey: groupKey,
 			GroupId:  groupID,
 			Set:      set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupSetUrl)
+	return a.doPeopleRequest(ctx, payload, groupSetUrl)
 }
 
 type groupSetOncePropertyPayload struct {
@@ -436,16 +439,16 @@ type groupSetOncePropertyPayload struct {
 
 // GroupSetOnce calls the Group Set Property Once API
 // https://developer.mixpanel.com/reference/group-set-property-once
-func (m *Mixpanel) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+func (a *ApiClient) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	payload := []groupSetOncePropertyPayload{
 		{
-			Token:    m.token,
+			Token:    a.token,
 			GroupKey: groupKey,
 			GroupId:  groupID,
 			SetOnce:  set,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsSetOnceUrl)
+	return a.doPeopleRequest(ctx, payload, groupsSetOnceUrl)
 }
 
 type groupDeletePropertyPayload struct {
@@ -457,16 +460,16 @@ type groupDeletePropertyPayload struct {
 
 // GroupDeleteProperty calls the group delete property API
 // https://developer.mixpanel.com/reference/group-delete-property
-func (m *Mixpanel) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
+func (a *ApiClient) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
 	payload := []groupDeletePropertyPayload{
 		{
-			Token:    m.token,
+			Token:    a.token,
 			GroupKey: groupKey,
 			GroupId:  groupID,
 			Unset:    unset,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl)
+	return a.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl)
 }
 
 type groupRemoveListPropertyPayload struct {
@@ -478,16 +481,16 @@ type groupRemoveListPropertyPayload struct {
 
 // GroupRemoveListProperty calls the Groups Remove from List Property API
 // https://developer.mixpanel.com/reference/group-remove-from-list-property
-func (m *Mixpanel) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
+func (a *ApiClient) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
 	payload := []groupRemoveListPropertyPayload{
 		{
-			Token:    m.token,
+			Token:    a.token,
 			GroupKey: groupKey,
 			GroupId:  groupID,
 			Remove:   remove,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl)
+	return a.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl)
 }
 
 type groupUnionListPropertyPayload struct {
@@ -499,16 +502,16 @@ type groupUnionListPropertyPayload struct {
 
 // GroupUnionListProperty calls the Groups Remove from Union Property API
 // https://developer.mixpanel.com/reference/group-union
-func (m *Mixpanel) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
+func (a *ApiClient) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
 	payload := []groupUnionListPropertyPayload{
 		{
-			Token:    m.token,
+			Token:    a.token,
 			GroupKey: groupKey,
 			GroupId:  groupID,
 			Union:    union,
 		},
 	}
-	return m.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl)
+	return a.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl)
 }
 
 type groupDeletePayload struct {
@@ -520,15 +523,15 @@ type groupDeletePayload struct {
 
 // GroupDelete calls the Groups Delete API
 // https://developer.mixpanel.com/reference/delete-group
-func (m *Mixpanel) GroupDelete(ctx context.Context, groupKey, groupID string) error {
+func (a *ApiClient) GroupDelete(ctx context.Context, groupKey, groupID string) error {
 	payload := []groupDeletePayload{
 		{
-			Token:    m.token,
+			Token:    a.token,
 			GroupKey: groupKey,
 			GroupId:  groupID,
 			Delete:   "null",
 		},
 	}
 
-	return m.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl)
+	return a.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl)
 }

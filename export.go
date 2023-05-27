@@ -20,7 +20,7 @@ const (
 
 // Export calls the Raw Export API
 // https://developer.mixpanel.com/reference/raw-event-export
-func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error) {
+func (a *ApiClient) Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error) {
 	query := url.Values{}
 	query.Add("from_date", fromDate.Format("2006-01-02"))
 	query.Add("to_date", toDate.Format("2006-01-02"))
@@ -34,12 +34,12 @@ func (m *Mixpanel) Export(ctx context.Context, fromDate, toDate time.Time, limit
 		query.Add("where", where)
 	}
 
-	httpResponse, err := m.doRequestBody(
+	httpResponse, err := a.doRequestBody(
 		ctx,
 		http.MethodGet,
-		m.dataEndpoint+exportUrl,
+		a.dataEndpoint+exportUrl,
 		nil,
-		m.exportServiceAccount(), acceptPlainText(), addQueryParams(query),
+		a.exportServiceAccount(), acceptPlainText(), addQueryParams(query),
 	)
 	if err != nil {
 		return nil, err

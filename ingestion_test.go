@@ -121,7 +121,7 @@ func TestNewEventFromJson(t *testing.T) {
 }
 
 func TestTrack(t *testing.T) {
-	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, testPayload func([]*Event), httpResponse *http.Response) {
+	setupHttpEndpointTest := func(t *testing.T, client *ApiClient, testPayload func([]*Event), httpResponse *http.Response) {
 		httpmock.Activate()
 		t.Cleanup(httpmock.DeactivateAndReset)
 
@@ -239,7 +239,7 @@ func TestTrack(t *testing.T) {
 }
 
 func TestImport(t *testing.T) {
-	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, queryValues url.Values, testPayload func([]*Event), httpResponse *http.Response) {
+	setupHttpEndpointTest := func(t *testing.T, client *ApiClient, queryValues url.Values, testPayload func([]*Event), httpResponse *http.Response) {
 		httpmock.Activate()
 		t.Cleanup(httpmock.DeactivateAndReset)
 
@@ -278,13 +278,15 @@ func TestImport(t *testing.T) {
 		} else {
 			query.Add("strict", "0")
 		}
+
 		query.Add("project_id", strconv.Itoa(projectID))
+
 		return query
 	}
 
 	t.Run("import successfully", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
@@ -301,11 +303,15 @@ func TestImport(t *testing.T) {
 	})
 
 	t.Run("api-secret-auth", func(t *testing.T) {
+		query := url.Values{}
+		query.Add("verbose", "1")
+		query.Add("strict", "1")
+
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
+		mp := NewClient("token", ApiSecret("api-secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+		setupHttpEndpointTest(t, mp, query, func(r []*Event) {
 			require.Equal(t, events, r)
 		}, &http.Response{
 			StatusCode: http.StatusOK,
@@ -320,7 +326,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can import gzip if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
@@ -341,7 +347,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can import non gzip data if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
@@ -362,7 +368,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can enable strict mode if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, true), func(r []*Event) {
@@ -383,7 +389,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can disable strict mode if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
@@ -404,7 +410,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("bad request", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
 			StatusCode: http.StatusBadRequest,
 			Body: io.NopCloser(strings.NewReader(`
@@ -436,7 +442,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("rate limit exceeded", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
 			StatusCode: http.StatusTooManyRequests,
@@ -469,7 +475,7 @@ func TestImport(t *testing.T) {
 		for _, test := range tests {
 			t.Run(fmt.Sprintf("http status code %d", test.httpStatusCode), func(t *testing.T) {
 				ctx := context.Background()
-				mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+				mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 				setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
 					StatusCode: test.httpStatusCode,
 					Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`
@@ -491,7 +497,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("unknown status code", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
@@ -549,7 +555,7 @@ func TestPeopleProperties(t *testing.T) {
 	})
 }
 
-func setupPeopleAndGroupsEndpoint(t *testing.T, client *Mixpanel, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
+func setupPeopleAndGroupsEndpoint(t *testing.T, client *ApiClient, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
 	httpmock.Activate()
 	t.Cleanup(httpmock.DeactivateAndReset)
 
