@@ -165,8 +165,8 @@ func DebugHttpCalls(writer io.Writer) Options {
 	}
 }
 
-// NewClient create a new mixpanel client
-func NewClient(token string, options ...Options) *ApiClient {
+// NewApiClient create a new mixpanel client
+func NewApiClient(token string, options ...Options) *ApiClient {
 	mp := &ApiClient{
 		client:        http.DefaultClient,
 		apiEndpoint:   usEndpoint,

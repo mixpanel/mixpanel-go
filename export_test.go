@@ -44,7 +44,7 @@ func TestExport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient("token", ServiceAccount(117, "username", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "username", "secret"))
 		events, err := mp.Export(ctx, parseDate(t, "2023-01-01"), parseDate(t, "2023-01-02"), ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
 		require.NoError(t, err)
 
@@ -69,7 +69,7 @@ func TestExport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient("token", ServiceAccount(117, "username", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "username", "secret"))
 		_, err := mp.Export(ctx, parseDate(t, "2023-01-01"), parseDate(t, "2023-01-02"), ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
 		require.NoError(t, err)
 	})
@@ -91,7 +91,7 @@ func TestExport(t *testing.T) {
 			}, nil
 		})
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		_, err := mp.Export(ctx, parseDate(t, "2023-01-01"), parseDate(t, "2023-01-02"), ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
 		require.NoError(t, err)
 	})

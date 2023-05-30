@@ -11,7 +11,7 @@ func PeopleRemoveListProperty() error {
 	ctx := context.Background()
 
 	// fill in your token and project id and service account user name and secret
-	mp := mixpanel.NewClient(
+	mp := mixpanel.NewApiClient(
 		"token",
 	)
 

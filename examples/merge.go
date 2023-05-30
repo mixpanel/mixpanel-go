@@ -9,7 +9,7 @@ import (
 func Merge() error {
 	ctx := context.Background()
 
-	mp := mixpanel.NewClient(
+	mp := mixpanel.NewApiClient(
 		"token",
 		// Need to provide api secret if you want to use the merge api
 		mixpanel.ApiSecret("secret"),

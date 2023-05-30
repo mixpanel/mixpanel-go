@@ -33,7 +33,7 @@ func setupIdentityEndpoint(t *testing.T, client *ApiClient, endpoint string, tes
 func TestAlias(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupIdentityEndpoint(t, mp, aliasEndpoint, func(req *http.Request) {}, func(body io.Reader) {
 		payload := &aliasPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&payload))
@@ -54,7 +54,7 @@ func TestAlias(t *testing.T) {
 func TestMerge(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupIdentityEndpoint(t, mp, mergeEndpoint, func(req *http.Request) {
 		auth := req.Header.Get("authorization")
 		require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(mp.apiSecret+":")))
