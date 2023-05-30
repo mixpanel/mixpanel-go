@@ -20,11 +20,10 @@ func Export() error {
 	ctx := context.Background()
 
 	// fill in your token and project id and service account user name and secret
-	mp := mixpanel.NewClient(
+	mp := mixpanel.NewApiClient(
 		"token",
-		mixpanel.ProjectID(0),
 		// Can use either ApiSecret or ServiceAccount
-		mixpanel.ServiceAccount("user_name", "secret"),
+		mixpanel.ServiceAccount(0, "user_name", "secret"),
 	)
 
 	startDate, err := parseTime("2023-05-22")

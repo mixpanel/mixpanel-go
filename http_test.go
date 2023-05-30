@@ -50,6 +50,18 @@ func TestHttpError(t *testing.T) {
 }
 
 func TestProcessPeopleRequestResponse(t *testing.T) {
+	t.Run("http 200 but code 0", func(t *testing.T) {
+		response := &http.Response{
+			StatusCode: http.StatusOK,
+			Body: io.NopCloser(strings.NewReader(`
+			0
+			`)),
+		}
+
+		err := processPeopleRequestResponse(response)
+		require.Error(t, err)
+	})
+
 	t.Run("StatusUnauthorized", func(t *testing.T) {
 		response := &http.Response{
 			StatusCode: http.StatusUnauthorized,

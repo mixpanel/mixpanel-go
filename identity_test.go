@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupIdentityEndpoint(t *testing.T, client *Mixpanel, endpoint string, testReq func(req *http.Request), testPayload func(body io.Reader), httpResponse *http.Response) {
+func setupIdentityEndpoint(t *testing.T, client *ApiClient, endpoint string, testReq func(req *http.Request), testPayload func(body io.Reader), httpResponse *http.Response) {
 	httpmock.Activate()
 	t.Cleanup(httpmock.DeactivateAndReset)
 
@@ -33,7 +33,7 @@ func setupIdentityEndpoint(t *testing.T, client *Mixpanel, endpoint string, test
 func TestAlias(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupIdentityEndpoint(t, mp, aliasEndpoint, func(req *http.Request) {}, func(body io.Reader) {
 		payload := &aliasPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&payload))
@@ -54,7 +54,7 @@ func TestAlias(t *testing.T) {
 func TestMerge(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupIdentityEndpoint(t, mp, mergeEndpoint, func(req *http.Request) {
 		auth := req.Header.Get("authorization")
 		require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(mp.apiSecret+":")))

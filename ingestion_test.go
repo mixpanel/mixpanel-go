@@ -21,7 +21,7 @@ import (
 
 func TestEvent(t *testing.T) {
 	t.Run("does not panic with nil properties", func(t *testing.T) {
-		mp := NewClient("")
+		mp := NewApiClient("")
 		event := mp.NewEvent("some event", EmptyDistinctID, nil)
 		require.NotNil(t, event.Properties)
 	})
@@ -29,7 +29,7 @@ func TestEvent(t *testing.T) {
 	t.Run("event add times correctly", func(t *testing.T) {
 		nowTime := time.Now()
 
-		mp := NewClient("")
+		mp := NewApiClient("")
 		event := mp.NewEvent("some event", EmptyDistinctID, nil)
 		event.AddTime(nowTime)
 
@@ -37,7 +37,7 @@ func TestEvent(t *testing.T) {
 	})
 
 	t.Run("insert id set correctly", func(t *testing.T) {
-		mp := NewClient("")
+		mp := NewApiClient("")
 		event := mp.NewEvent("some event", EmptyDistinctID, nil)
 		event.AddInsertID("insert-id")
 
@@ -48,7 +48,7 @@ func TestEvent(t *testing.T) {
 		ip := net.ParseIP("10.1.1.117")
 		require.NotNil(t, ip)
 
-		mp := NewClient("")
+		mp := NewApiClient("")
 		event := mp.NewEvent("some event", EmptyDistinctID, nil)
 		event.AddIP(ip)
 
@@ -56,7 +56,7 @@ func TestEvent(t *testing.T) {
 	})
 
 	t.Run("does not panic if ip is nill", func(t *testing.T) {
-		mp := NewClient("")
+		mp := NewApiClient("")
 		event := mp.NewEvent("some event", EmptyDistinctID, nil)
 		event.AddIP(nil)
 
@@ -78,7 +78,7 @@ func TestNewEventFromJson(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonPayload), &payload)
 		require.NoError(t, err)
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		event, err := mp.NewEventFromJson(payload)
 		require.NoError(t, err)
 
@@ -98,7 +98,7 @@ func TestNewEventFromJson(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonPayload), &payload)
 		require.NoError(t, err)
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		_, err = mp.NewEventFromJson(payload)
 		require.Error(t, err)
 	})
@@ -114,14 +114,14 @@ func TestNewEventFromJson(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonPayload), &payload)
 		require.NoError(t, err)
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		_, err = mp.NewEventFromJson(payload)
 		require.Error(t, err)
 	})
 }
 
 func TestTrack(t *testing.T) {
-	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, testPayload func([]*Event), httpResponse *http.Response) {
+	setupHttpEndpointTest := func(t *testing.T, client *ApiClient, testPayload func([]*Event), httpResponse *http.Response) {
 		httpmock.Activate()
 		t.Cleanup(httpmock.DeactivateAndReset)
 
@@ -153,7 +153,7 @@ func TestTrack(t *testing.T) {
 
 	t.Run("can track an event", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 
 		events := []*Event{
 			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
@@ -168,7 +168,7 @@ func TestTrack(t *testing.T) {
 
 	t.Run("eu data residency works correctly", func(t *testing.T) {
 		ctx := context.Background()
-		euMixpanel := NewClient("token", EuResidency())
+		euMixpanel := NewApiClient("token", EuResidency())
 
 		events := []*Event{
 			euMixpanel.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
@@ -180,13 +180,13 @@ func TestTrack(t *testing.T) {
 
 		require.NoError(t, euMixpanel.Track(ctx, events))
 
-		usMixpanel := NewClient("token")
+		usMixpanel := NewApiClient("token")
 		require.Error(t, usMixpanel.Track(ctx, events))
 	})
 
 	t.Run("track multiple events successfully", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 
 		events := []*Event{
 			mp.NewEvent("sample_event_1", EmptyDistinctID, map[string]any{}),
@@ -204,7 +204,7 @@ func TestTrack(t *testing.T) {
 
 	t.Run("return error # of events are more than track allows", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		var events []*Event
 		for i := 0; i < MaxTrackEvents+1; i++ {
 			events = append(events, mp.NewEvent("some event", EmptyDistinctID, map[string]any{}))
@@ -216,7 +216,7 @@ func TestTrack(t *testing.T) {
 
 	t.Run("track call failed and return error", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 
 		events := []*Event{
 			mp.NewEvent("sample_event", EmptyDistinctID, map[string]any{}),
@@ -239,7 +239,7 @@ func TestTrack(t *testing.T) {
 }
 
 func TestImport(t *testing.T) {
-	setupHttpEndpointTest := func(t *testing.T, client *Mixpanel, queryValues url.Values, testPayload func([]*Event), httpResponse *http.Response) {
+	setupHttpEndpointTest := func(t *testing.T, client *ApiClient, queryValues url.Values, testPayload func([]*Event), httpResponse *http.Response) {
 		httpmock.Activate()
 		t.Cleanup(httpmock.DeactivateAndReset)
 
@@ -278,13 +278,15 @@ func TestImport(t *testing.T) {
 		} else {
 			query.Add("strict", "0")
 		}
+
 		query.Add("project_id", strconv.Itoa(projectID))
+
 		return query
 	}
 
 	t.Run("import successfully", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
@@ -301,11 +303,15 @@ func TestImport(t *testing.T) {
 	})
 
 	t.Run("api-secret-auth", func(t *testing.T) {
+		query := url.Values{}
+		query.Add("verbose", "1")
+		query.Add("strict", "1")
+
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ApiSecret("api-secret"))
+		mp := NewApiClient("token", ApiSecret("api-secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
-		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+		setupHttpEndpointTest(t, mp, query, func(r []*Event) {
 			require.Equal(t, events, r)
 		}, &http.Response{
 			StatusCode: http.StatusOK,
@@ -320,7 +326,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can import gzip if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
@@ -341,7 +347,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can import non gzip data if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
@@ -362,7 +368,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can enable strict mode if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, true), func(r []*Event) {
@@ -383,7 +389,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("can disable strict mode if requested", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
@@ -404,7 +410,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("bad request", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
 			StatusCode: http.StatusBadRequest,
 			Body: io.NopCloser(strings.NewReader(`
@@ -436,7 +442,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("rate limit exceeded", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
 			StatusCode: http.StatusTooManyRequests,
@@ -469,7 +475,7 @@ func TestImport(t *testing.T) {
 		for _, test := range tests {
 			t.Run(fmt.Sprintf("http status code %d", test.httpStatusCode), func(t *testing.T) {
 				ctx := context.Background()
-				mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+				mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 				setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
 					StatusCode: test.httpStatusCode,
 					Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`
@@ -491,7 +497,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("unknown status code", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token", ProjectID(117), ServiceAccount("user-name", "secret"))
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, getValues(117, false), func(r []*Event) {
@@ -510,7 +516,7 @@ func TestImport(t *testing.T) {
 
 	t.Run("don't send more events then allowed", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		var events []*Event
 		for i := 0; i < MaxImportEvents+1; i++ {
 			events = append(events, mp.NewEvent("some event", EmptyDistinctID, map[string]any{}))
@@ -549,7 +555,7 @@ func TestPeopleProperties(t *testing.T) {
 	})
 }
 
-func setupPeopleAndGroupsEndpoint(t *testing.T, client *Mixpanel, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
+func setupPeopleAndGroupsEndpoint(t *testing.T, client *ApiClient, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
 	httpmock.Activate()
 	t.Cleanup(httpmock.DeactivateAndReset)
 
@@ -577,7 +583,7 @@ var peopleAndGroupSuccess = func() *http.Response {
 func TestPeopleSet(t *testing.T) {
 	t.Run("can set one person", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 
 		people := NewPeopleProperties("some-id", map[string]any{
 			"some-key": "some-value",
@@ -599,7 +605,7 @@ func TestPeopleSet(t *testing.T) {
 
 	t.Run("can set multiple people", func(t *testing.T) {
 		ctx := context.Background()
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 
 		person1 := NewPeopleProperties("some-id-1", map[string]any{
 			"some-key": "some-value",
@@ -629,7 +635,7 @@ func TestPeopleSet(t *testing.T) {
 	t.Run("can not go above the limit", func(t *testing.T) {
 		ctx := context.Background()
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		var people []*PeopleProperties
 		for i := 0; i < MaxPeopleEvents+1; i++ {
 			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
@@ -643,7 +649,7 @@ func TestPeopleSetOnce(t *testing.T) {
 	t.Run("can set one", func(t *testing.T) {
 		ctx := context.Background()
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		person1 := NewPeopleProperties("some-id-1", map[string]any{
 			"some-key": "some-value",
 		})
@@ -663,7 +669,7 @@ func TestPeopleSetOnce(t *testing.T) {
 	t.Run("can not go above the limit", func(t *testing.T) {
 		ctx := context.Background()
 
-		mp := NewClient("token")
+		mp := NewApiClient("token")
 		var people []*PeopleProperties
 		for i := 0; i < MaxPeopleEvents+1; i++ {
 			people = append(people, NewPeopleProperties("some-id", map[string]any{}))
@@ -676,7 +682,7 @@ func TestPeopleSetOnce(t *testing.T) {
 func TestPeopleUnion(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, peopleUnionToListUrl, func(body io.Reader) {
 		arrayPayload := []*peopleUnionPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -696,7 +702,7 @@ func TestPeopleUnion(t *testing.T) {
 func TestPeoplePeopleIncrement(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, peopleIncrementUrl, func(body io.Reader) {
 		arrayPayload := []*peopleNumericalAddPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -716,7 +722,7 @@ func TestPeoplePeopleIncrement(t *testing.T) {
 func TestPeopleAppendListProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, peopleAppendToListUrl, func(body io.Reader) {
 		arrayPayload := []*peopleAppendListPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -736,7 +742,7 @@ func TestPeopleAppendListProperty(t *testing.T) {
 func TestPeopleRemoveListProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, peopleRemoveFromListUrl, func(body io.Reader) {
 		arrayPayload := []*peopleListRemovePayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -756,7 +762,7 @@ func TestPeopleRemoveListProperty(t *testing.T) {
 func TestPeopleDeleteProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, peopleDeletePropertyUrl, func(body io.Reader) {
 		arrayPayload := []*peopleDeletePropertyPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -774,7 +780,7 @@ func TestPeopleDeleteProperty(t *testing.T) {
 func TestPeopleDeleteProfile(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, peopleDeleteProfileUrl, func(body io.Reader) {
 		arrayPayload := []*peopleDeleteProfilePayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -792,7 +798,7 @@ func TestPeopleDeleteProfile(t *testing.T) {
 func TestGroupSetProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, groupSetUrl, func(body io.Reader) {
 		arrayPayload := []*groupSetPropertyPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -813,7 +819,7 @@ func TestGroupSetProperty(t *testing.T) {
 func TestGroupSetOnce(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, groupsSetOnceUrl, func(body io.Reader) {
 		arrayPayload := []*groupSetOncePropertyPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -834,7 +840,7 @@ func TestGroupSetOnce(t *testing.T) {
 func TestGroupDeleteProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, groupsDeletePropertyUrl, func(body io.Reader) {
 		arrayPayload := []*groupDeletePropertyPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -853,7 +859,7 @@ func TestGroupDeleteProperty(t *testing.T) {
 func TestGroupRemoveListProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, groupsRemoveFromListPropertyUrl, func(body io.Reader) {
 		arrayPayload := []*groupRemoveListPropertyPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -874,7 +880,7 @@ func TestGroupRemoveListProperty(t *testing.T) {
 func TestGroupUnionListProperty(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, groupsUnionListPropertyUrl, func(body io.Reader) {
 		arrayPayload := []*groupUnionListPropertyPayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))
@@ -895,7 +901,7 @@ func TestGroupUnionListProperty(t *testing.T) {
 func TestGroupDelete(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewClient("token")
+	mp := NewApiClient("token")
 	setupPeopleAndGroupsEndpoint(t, mp, groupsDeleteGroupUrl, func(body io.Reader) {
 		arrayPayload := []*groupDeletePayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&arrayPayload))

@@ -9,7 +9,7 @@ import (
 func Alias() error {
 	ctx := context.Background()
 
-	mp := mixpanel.NewClient(
+	mp := mixpanel.NewApiClient(
 		"token",
 	)
 

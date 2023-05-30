@@ -19,17 +19,17 @@ type aliasProperties struct {
 }
 
 // https://developer.mixpanel.com/reference/identity-create-alias
-func (m *Mixpanel) Alias(ctx context.Context, aliasID, distinctID string) error {
+func (a *ApiClient) Alias(ctx context.Context, aliasID, distinctID string) error {
 	payload := &aliasPayload{
 		Event: "$create_alias",
 		Properties: aliasProperties{
 			DistinctId: distinctID,
 			Alias:      aliasID,
-			Token:      m.token,
+			Token:      a.token,
 		},
 	}
 
-	return m.doIdentifyRequest(ctx, payload, aliasEndpoint)
+	return a.doIdentifyRequest(ctx, payload, aliasEndpoint)
 }
 
 type mergePayload struct {
@@ -43,7 +43,7 @@ type mergeProperties struct {
 
 // https://developer.mixpanel.com/reference/identity-merge
 // must provide api secret
-func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
+func (a *ApiClient) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
 	payload := &mergePayload{
 		Event: "$merge",
 		Properties: mergeProperties{
@@ -51,5 +51,5 @@ func (m *Mixpanel) Merge(ctx context.Context, distinctID1, distinctID2 string) e
 		},
 	}
 
-	return m.doIdentifyRequest(ctx, payload, mergeEndpoint, m.useApiSecret())
+	return a.doIdentifyRequest(ctx, payload, mergeEndpoint, a.useApiSecret())
 }
