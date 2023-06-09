@@ -279,7 +279,6 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 			Set:        p.Properties,
 			IP:         p.shouldTrackIP(),
 		}
-		fmt.Println(payloads[i])
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
 }
