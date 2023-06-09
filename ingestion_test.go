@@ -553,6 +553,31 @@ func TestPeopleProperties(t *testing.T) {
 		props.SetIp(nil)
 		require.NotContains(t, props.Properties, string(PeopleGeolocationByIpProperty))
 	})
+
+	t.Run("0 if no ip is provided", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", map[string]any{})
+		require.Equal(t, "0", props.shouldTrackIP())
+	})
+
+	t.Run("1 if no ip is provided", func(t *testing.T) {
+		ip := net.ParseIP("10.1.1.117")
+		require.NotNil(t, ip)
+
+		props := NewPeopleProperties("some-id", map[string]any{
+			string(PeopleGeolocationByIpProperty): ip.String(),
+		})
+		require.Equal(t, "1", props.shouldTrackIP())
+	})
+
+	t.Run("0 if value if ip is not a string", func(t *testing.T) {
+		ip := net.ParseIP("10.1.1.117")
+		require.NotNil(t, ip)
+
+		props := NewPeopleProperties("some-id", map[string]any{
+			string(PeopleGeolocationByIpProperty): ip,
+		})
+		require.Equal(t, "0", props.shouldTrackIP())
+	})
 }
 
 func setupPeopleAndGroupsEndpoint(t *testing.T, client *ApiClient, endpoint string, testPayload func(body io.Reader), httpResponse *http.Response) {
@@ -595,6 +620,31 @@ func TestPeopleSet(t *testing.T) {
 
 			require.Len(t, payload, 1)
 			require.Equal(t, people.DistinctID, payload[0].DistinctID)
+			require.Equal(t, "0", payload[0].IP)
+
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
+			people,
+		}))
+	})
+
+	t.Run("track ip if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("token")
+
+		people := NewPeopleProperties("some-id", map[string]any{
+			"some-key":                            "some-value",
+			string(PeopleGeolocationByIpProperty): "127.0.0.1",
+		})
+
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetURL, func(body io.Reader) {
+			payload := []*peopleSetPayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, people.DistinctID, payload[0].DistinctID)
+			require.Equal(t, "1", payload[0].IP)
 
 		}, peopleAndGroupSuccess())
 
@@ -660,6 +710,29 @@ func TestPeopleSetOnce(t *testing.T) {
 			require.Len(t, payload, 1)
 			require.Equal(t, mp.token, payload[0].Token)
 			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
+			require.Equal(t, "0", payload[0].IP)
+
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{person1}))
+	})
+
+	t.Run("can set one", func(t *testing.T) {
+		ctx := context.Background()
+
+		mp := NewApiClient("token")
+		person1 := NewPeopleProperties("some-id-1", map[string]any{
+			"some-key":                            "some-value",
+			string(PeopleGeolocationByIpProperty): "127.0.0.1",
+		})
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetOnceURL, func(body io.Reader) {
+			payload := []*peopleSetOncePayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, mp.token, payload[0].Token)
+			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
+			require.Equal(t, "1", payload[0].IP)
 
 		}, peopleAndGroupSuccess())
 

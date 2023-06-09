@@ -249,10 +249,13 @@ func (p *PeopleProperties) SetIp(ip net.IP) {
 func (p *PeopleProperties) shouldTrackIP() string {
 	v, ok := p.Properties[string(PeopleGeolocationByIpProperty)]
 	if !ok {
-		return "1"
+		return "0"
 	}
 	if s, ok := v.(string); ok {
-		return s
+		if s == "" {
+			return "0"
+		}
+		return "1"
 	}
 	return "0"
 }
