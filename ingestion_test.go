@@ -55,7 +55,7 @@ func TestEvent(t *testing.T) {
 		require.Equal(t, ip.String(), event.Properties[propertyIP])
 	})
 
-	t.Run("does not panic if ip is nill", func(t *testing.T) {
+	t.Run("does not panic if ip is nil", func(t *testing.T) {
 		mp := NewApiClient("")
 		event := mp.NewEvent("some event", EmptyDistinctID, nil)
 		event.AddIP(nil)
@@ -559,14 +559,14 @@ func TestPeopleProperties(t *testing.T) {
 		require.Equal(t, "0", props.shouldTrackIP())
 	})
 
-	t.Run("1 if no ip is provided", func(t *testing.T) {
+	t.Run("ip is set if ip is provided", func(t *testing.T) {
 		ip := net.ParseIP("10.1.1.117")
 		require.NotNil(t, ip)
 
 		props := NewPeopleProperties("some-id", map[string]any{
 			string(PeopleGeolocationByIpProperty): ip.String(),
 		})
-		require.Equal(t, "1", props.shouldTrackIP())
+		require.Equal(t, "10.1.1.117", props.shouldTrackIP())
 	})
 
 	t.Run("0 if value if ip is not a string", func(t *testing.T) {
@@ -644,7 +644,7 @@ func TestPeopleSet(t *testing.T) {
 
 			require.Len(t, payload, 1)
 			require.Equal(t, people.DistinctID, payload[0].DistinctID)
-			require.Equal(t, "1", payload[0].IP)
+			require.Equal(t, "127.0.0.1", payload[0].IP)
 
 		}, peopleAndGroupSuccess())
 
@@ -732,7 +732,7 @@ func TestPeopleSetOnce(t *testing.T) {
 			require.Len(t, payload, 1)
 			require.Equal(t, mp.token, payload[0].Token)
 			require.Equal(t, person1.DistinctID, payload[0].DistinctID)
-			require.Equal(t, "1", payload[0].IP)
+			require.Equal(t, "127.0.0.1", payload[0].IP)
 
 		}, peopleAndGroupSuccess())
 

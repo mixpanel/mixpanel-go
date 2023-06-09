@@ -252,10 +252,8 @@ func (p *PeopleProperties) shouldTrackIP() string {
 		return "0"
 	}
 	if s, ok := v.(string); ok {
-		if s == "" {
-			return "0"
-		}
-		return "1"
+		// if ip is provided, passing it to mixpanel will cause it to be geo lookup
+		return s
 	}
 	return "0"
 }
