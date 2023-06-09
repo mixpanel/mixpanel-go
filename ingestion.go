@@ -246,7 +246,7 @@ func (p *PeopleProperties) SetIp(ip net.IP) {
 }
 
 // Note: if no ip is provided, we will not track by default
-func (p *PeopleProperties) shouldTrackIP() string {
+func (p *PeopleProperties) shouldGeoLookupIp() string {
 	v, ok := p.Properties[string(PeopleGeolocationByIpProperty)]
 	if !ok {
 		return "0"
@@ -278,7 +278,7 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 			Token:      a.token,
 			DistinctID: p.DistinctID,
 			Set:        p.Properties,
-			IP:         p.shouldTrackIP(),
+			IP:         p.shouldGeoLookupIp(),
 		}
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
@@ -304,7 +304,7 @@ func (a *ApiClient) PeopleSetOnce(ctx context.Context, people []*PeoplePropertie
 			Token:      a.token,
 			DistinctID: p.DistinctID,
 			SetOnce:    p.Properties,
-			IP:         p.shouldTrackIP(),
+			IP:         p.shouldGeoLookupIp(),
 		}
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetOnceURL)

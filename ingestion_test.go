@@ -556,7 +556,7 @@ func TestPeopleProperties(t *testing.T) {
 
 	t.Run("0 if no ip is provided", func(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{})
-		require.Equal(t, "0", props.shouldTrackIP())
+		require.Equal(t, "0", props.shouldGeoLookupIp())
 	})
 
 	t.Run("ip is set if ip is provided", func(t *testing.T) {
@@ -566,7 +566,7 @@ func TestPeopleProperties(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{
 			string(PeopleGeolocationByIpProperty): ip.String(),
 		})
-		require.Equal(t, "10.1.1.117", props.shouldTrackIP())
+		require.Equal(t, "10.1.1.117", props.shouldGeoLookupIp())
 	})
 
 	t.Run("0 if value if ip is not a string", func(t *testing.T) {
@@ -576,7 +576,7 @@ func TestPeopleProperties(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{
 			string(PeopleGeolocationByIpProperty): ip,
 		})
-		require.Equal(t, "0", props.shouldTrackIP())
+		require.Equal(t, "0", props.shouldGeoLookupIp())
 	})
 }
 
