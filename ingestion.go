@@ -245,10 +245,23 @@ func (p *PeopleProperties) SetIp(ip net.IP) {
 	p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
 }
 
+// Note: if no ip is provided, we will not track by default
+func (p *PeopleProperties) shouldTrackIP() string {
+	v, ok := p.Properties[string(PeopleGeolocationByIpProperty)]
+	if !ok {
+		return "1"
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return "0"
+}
+
 type peopleSetPayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	Set        map[string]any `json:"$set"`
+	IP         string         `json:"$ip"`
 }
 
 // PeopleSet calls the User Set Property API
@@ -264,7 +277,9 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 			Token:      a.token,
 			DistinctID: p.DistinctID,
 			Set:        p.Properties,
+			IP:         p.shouldTrackIP(),
 		}
+		fmt.Println(payloads[i])
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
 }
@@ -273,6 +288,7 @@ type peopleSetOncePayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	SetOnce    map[string]any `json:"$set_once"`
+	IP         string         `json:"$ip"`
 }
 
 // PeopleSetOnce calls the User Set Property Once API
@@ -288,6 +304,7 @@ func (a *ApiClient) PeopleSetOnce(ctx context.Context, people []*PeoplePropertie
 			Token:      a.token,
 			DistinctID: p.DistinctID,
 			SetOnce:    p.Properties,
+			IP:         p.shouldTrackIP(),
 		}
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
