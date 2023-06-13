@@ -272,7 +272,6 @@ func (p *PeopleProperties) shouldGeoLookupIp() string {
 	}
 	if s, ok := v.(string); ok {
 		// if ip is provided, passing it to mixpanel will cause it to be geo lookup
-		// if ip is 1 then then ip will be the machine that sent the request
 		return s
 	}
 	return "0"
