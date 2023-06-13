@@ -237,12 +237,22 @@ func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties,
 	p.Properties[string(property)] = value
 }
 
-func (p *PeopleProperties) SetIp(ip net.IP) {
-	if ip == nil {
-		return
+type PeopleIpOptions = func(peopleProperties *PeopleProperties)
+
+func UseServerIp() PeopleIpOptions {
+	return func(peopleProperties *PeopleProperties) {
+		peopleProperties.Properties[string(PeopleGeolocationByIpProperty)] = "1"
+	}
+}
+
+func (p *PeopleProperties) SetIp(ip net.IP, options ...PeopleIpOptions) {
+	if ip != nil {
+		p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
 	}
 
-	p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
+	for _, option := range options {
+		option(p)
+	}
 }
 
 // Note: if no ip is provided, we will not track by default
@@ -253,6 +263,7 @@ func (p *PeopleProperties) shouldGeoLookupIp() string {
 	}
 	if s, ok := v.(string); ok {
 		// if ip is provided, passing it to mixpanel will cause it to be geo lookup
+		// if ip is 1 then then ip will be the machine that sent the request
 		return s
 	}
 	return "0"

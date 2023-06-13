@@ -548,6 +548,12 @@ func TestPeopleProperties(t *testing.T) {
 		require.Equal(t, ip.String(), props.Properties[string(PeopleGeolocationByIpProperty)])
 	})
 
+	t.Run("can use server ip", func(t *testing.T) {
+		props := NewPeopleProperties("some-id", map[string]any{})
+		props.SetIp(nil, UseServerIp())
+		require.Equal(t, "1", props.Properties[string(PeopleGeolocationByIpProperty)])
+	})
+
 	t.Run("doesn't set ip if invalid", func(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{})
 		props.SetIp(nil)
