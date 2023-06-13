@@ -217,8 +217,9 @@ const (
 )
 
 type PeopleProperties struct {
-	DistinctID string
-	Properties map[string]any
+	DistinctID   string
+	Properties   map[string]any
+	UseRequestIp bool
 }
 
 func NewPeopleProperties(distinctID string, properties map[string]any) *PeopleProperties {
@@ -237,18 +238,50 @@ func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties,
 	p.Properties[string(property)] = value
 }
 
-func (p *PeopleProperties) SetIp(ip net.IP) {
-	if ip == nil {
-		return
+type PeopleIpOptions = func(peopleProperties *PeopleProperties)
+
+func UseRequestIp() PeopleIpOptions {
+	return func(peopleProperties *PeopleProperties) {
+		peopleProperties.UseRequestIp = true
+	}
+}
+
+// SetIp will cause mixpanel to geo lookup the ip for the user
+// if no ip is provided, we will not lookup
+// if ip is provided, we will lookup the ip
+// if you want to use the request ip to lookup the geo location then use UseRequestIp option
+func (p *PeopleProperties) SetIp(ip net.IP, options ...PeopleIpOptions) {
+	if ip != nil {
+		p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
 	}
 
-	p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
+	for _, option := range options {
+		option(p)
+	}
+}
+
+// Note: if no ip is provided, we will not track by default
+func (p *PeopleProperties) shouldGeoLookupIp() string {
+	if p.UseRequestIp {
+		return ""
+	}
+
+	v, ok := p.Properties[string(PeopleGeolocationByIpProperty)]
+	if !ok {
+		return "0"
+	}
+	if s, ok := v.(string); ok {
+		// if ip is provided, passing it to mixpanel will cause it to be geo lookup
+		return s
+	}
+	return "0"
 }
 
 type peopleSetPayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	Set        map[string]any `json:"$set"`
+	IP         string         `json:"$ip,omitempty"`
 }
 
 // PeopleSet calls the User Set Property API
@@ -264,7 +297,9 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 			Token:      a.token,
 			DistinctID: p.DistinctID,
 			Set:        p.Properties,
+			IP:         p.shouldGeoLookupIp(),
 		}
+		fmt.Println(p.shouldGeoLookupIp())
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
 }
@@ -273,6 +308,7 @@ type peopleSetOncePayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	SetOnce    map[string]any `json:"$set_once"`
+	IP         string         `json:"$ip,omitempty"`
 }
 
 // PeopleSetOnce calls the User Set Property Once API
@@ -288,6 +324,7 @@ func (a *ApiClient) PeopleSetOnce(ctx context.Context, people []*PeoplePropertie
 			Token:      a.token,
 			DistinctID: p.DistinctID,
 			SetOnce:    p.Properties,
+			IP:         p.shouldGeoLookupIp(),
 		}
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetOnceURL)
