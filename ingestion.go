@@ -308,7 +308,7 @@ type peopleSetOncePayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	SetOnce    map[string]any `json:"$set_once"`
-	IP         string         `json:"$ip"`
+	IP         string         `json:"$ip,omitempty"`
 }
 
 // PeopleSetOnce calls the User Set Property Once API

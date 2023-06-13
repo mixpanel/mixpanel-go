@@ -659,7 +659,7 @@ func TestPeopleSet(t *testing.T) {
 		}))
 	})
 
-	t.Run("Use Request Ip if Requested", func(t *testing.T) {
+	t.Run("use request ip if requested", func(t *testing.T) {
 		ctx := context.Background()
 		mp := NewApiClient("token")
 
@@ -770,6 +770,57 @@ func TestPeopleSetOnce(t *testing.T) {
 		}, peopleAndGroupSuccess())
 
 		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{person1}))
+	})
+
+	t.Run("track ip if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("token")
+
+		people := NewPeopleProperties("some-id", map[string]any{
+			"some-key":                            "some-value",
+			string(PeopleGeolocationByIpProperty): "127.0.0.1",
+		})
+
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetOnceURL, func(body io.Reader) {
+			payload := []*peopleSetOncePayload{}
+			require.NoError(t, json.NewDecoder(body).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, people.DistinctID, payload[0].DistinctID)
+			require.Equal(t, "127.0.0.1", payload[0].IP)
+
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{
+			people,
+		}))
+	})
+
+	t.Run("use request ip if requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("token")
+
+		people := NewPeopleProperties("some-id", map[string]any{
+			"some-key": "some-value",
+		})
+		people.SetIp(nil, UseRequestIp())
+
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetOnceURL, func(body io.Reader) {
+			stringBody, err := io.ReadAll(body)
+			require.NoError(t, err)
+
+			payload := []*peopleSetOncePayload{}
+			require.NoError(t, json.NewDecoder(strings.NewReader(string(stringBody))).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, people.DistinctID, payload[0].DistinctID)
+			require.False(t, strings.Contains(string(stringBody), "$ip"))
+
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{
+			people,
+		}))
 	})
 
 	t.Run("can not go above the limit", func(t *testing.T) {
