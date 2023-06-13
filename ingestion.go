@@ -217,8 +217,9 @@ const (
 )
 
 type PeopleProperties struct {
-	DistinctID string
-	Properties map[string]any
+	DistinctID   string
+	Properties   map[string]any
+	UseRequestIp bool
 }
 
 func NewPeopleProperties(distinctID string, properties map[string]any) *PeopleProperties {
@@ -239,9 +240,9 @@ func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties,
 
 type PeopleIpOptions = func(peopleProperties *PeopleProperties)
 
-func UseServerIp() PeopleIpOptions {
+func UseRequestIp() PeopleIpOptions {
 	return func(peopleProperties *PeopleProperties) {
-		peopleProperties.Properties[string(PeopleGeolocationByIpProperty)] = "1"
+		peopleProperties.UseRequestIp = true
 	}
 }
 
@@ -257,6 +258,10 @@ func (p *PeopleProperties) SetIp(ip net.IP, options ...PeopleIpOptions) {
 
 // Note: if no ip is provided, we will not track by default
 func (p *PeopleProperties) shouldGeoLookupIp() string {
+	if p.UseRequestIp {
+		return ""
+	}
+
 	v, ok := p.Properties[string(PeopleGeolocationByIpProperty)]
 	if !ok {
 		return "0"
@@ -273,7 +278,7 @@ type peopleSetPayload struct {
 	Token      string         `json:"$token"`
 	DistinctID string         `json:"$distinct_id"`
 	Set        map[string]any `json:"$set"`
-	IP         string         `json:"$ip"`
+	IP         string         `json:"$ip,omitempty"`
 }
 
 // PeopleSet calls the User Set Property API
@@ -291,6 +296,7 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 			Set:        p.Properties,
 			IP:         p.shouldGeoLookupIp(),
 		}
+		fmt.Println(p.shouldGeoLookupIp())
 	}
 	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
 }

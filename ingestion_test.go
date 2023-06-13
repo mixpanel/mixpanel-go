@@ -550,8 +550,8 @@ func TestPeopleProperties(t *testing.T) {
 
 	t.Run("can use server ip", func(t *testing.T) {
 		props := NewPeopleProperties("some-id", map[string]any{})
-		props.SetIp(nil, UseServerIp())
-		require.Equal(t, "1", props.Properties[string(PeopleGeolocationByIpProperty)])
+		props.SetIp(nil, UseRequestIp())
+		require.Equal(t, true, props.UseRequestIp)
 	})
 
 	t.Run("doesn't set ip if invalid", func(t *testing.T) {
@@ -651,6 +651,33 @@ func TestPeopleSet(t *testing.T) {
 			require.Len(t, payload, 1)
 			require.Equal(t, people.DistinctID, payload[0].DistinctID)
 			require.Equal(t, "127.0.0.1", payload[0].IP)
+
+		}, peopleAndGroupSuccess())
+
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{
+			people,
+		}))
+	})
+
+	t.Run("Use Request Ip if Requested", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("token")
+
+		people := NewPeopleProperties("some-id", map[string]any{
+			"some-key": "some-value",
+		})
+		people.SetIp(nil, UseRequestIp())
+
+		setupPeopleAndGroupsEndpoint(t, mp, peopleSetURL, func(body io.Reader) {
+			stringBody, err := io.ReadAll(body)
+			require.NoError(t, err)
+
+			payload := []*peopleSetPayload{}
+			require.NoError(t, json.NewDecoder(strings.NewReader(string(stringBody))).Decode(&payload))
+
+			require.Len(t, payload, 1)
+			require.Equal(t, people.DistinctID, payload[0].DistinctID)
+			require.False(t, strings.Contains(string(stringBody), "$ip"))
 
 		}, peopleAndGroupSuccess())
 
