@@ -246,6 +246,10 @@ func UseRequestIp() PeopleIpOptions {
 	}
 }
 
+// SetIp will cause mixpanel to geo lookup the ip for the user
+// if no ip is provided, we will not lookup
+// if ip is provided, we will lookup the ip
+// if you want to use the request ip to lookup the geo location then use UseRequestIp option
 func (p *PeopleProperties) SetIp(ip net.IP, options ...PeopleIpOptions) {
 	if ip != nil {
 		p.Properties[string(PeopleGeolocationByIpProperty)] = ip.String()
