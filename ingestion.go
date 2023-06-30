@@ -149,7 +149,7 @@ func (a *ApiClient) Import(ctx context.Context, events []*Event, options ImportO
 		return nil, fmt.Errorf("failed to create request body: %w", err)
 	}
 
-	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), a.useServiceAccountOrProjectToken()}
+	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), a.importAuthOptions()}
 	if options.Compression == Gzip {
 		httpOptions = append(httpOptions, gzipHeader())
 	}

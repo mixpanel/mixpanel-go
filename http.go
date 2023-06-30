@@ -71,11 +71,12 @@ func applicationFormData() httpOptions {
 	}
 }
 
-func (m *ApiClient) useServiceAccountOrProjectToken() httpOptions {
+func (m *ApiClient) importAuthOptions() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
 			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
-
+		} else if m.apiSecret != "" {
+			req.SetBasicAuth(m.apiSecret, "")
 		} else {
 			req.SetBasicAuth(m.token, "")
 		}

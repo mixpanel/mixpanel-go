@@ -247,6 +247,8 @@ func TestImport(t *testing.T) {
 			auth := req.Header.Get("authorization")
 			if client.serviceAccount != nil {
 				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.serviceAccount.Username+":"+client.serviceAccount.Secret)))
+			} else if client.apiSecret != "" {
+				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.apiSecret+":")))
 			} else {
 				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.token+":")))
 			}
@@ -290,6 +292,28 @@ func TestImport(t *testing.T) {
 
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
+		})
+
+		success, err := mp.Import(ctx, events, ImportOptionsRecommend)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
+	})
+
+	t.Run("api-secret", func(t *testing.T) {
+		query := url.Values{}
+		query.Add("verbose", "1")
+		query.Add("strict", "1")
+
+		ctx := context.Background()
+		mp := NewApiClient("token", ApiSecret("some-secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
+
+		setupHttpEndpointTest(t, mp, query, func(r []*Event) {
 			require.Equal(t, events, r)
 		}, &http.Response{
 			StatusCode: http.StatusOK,
