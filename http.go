@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strconv"
 )
@@ -128,20 +129,31 @@ type debugHttpCalls struct {
 	writer io.Writer
 }
 
-func (d *debugHttpCalls) writeDebug(call debugHttpCall) error {
+func (d *debugHttpCalls) writeDebug(r *http.Request) error {
 	if d.writer == nil {
 		return nil
 	}
 
-	debugPayload, err := json.MarshalIndent(call, "", "\t")
+	requestDump, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		return fmt.Errorf("failed to marshal debug_http payload %w", err)
+		return fmt.Errorf("failed to dump request %w", err)
 	}
 
-	_, err = d.writer.Write(debugPayload)
+	_, err = d.writer.Write([]byte("-----Start Request-----\n"))
+	if err != nil {
+		return fmt.Errorf("failed to write start header %w", err)
+	}
+
+	_, err = d.writer.Write(requestDump)
 	if err != nil {
 		return fmt.Errorf("failed to write debug_http payload %w", err)
 	}
+
+	_, err = d.writer.Write([]byte("\n-----End Request-----\n\n"))
+	if err != nil {
+		return fmt.Errorf("failed to write end header %w", err)
+	}
+
 	return nil
 }
 
@@ -157,12 +169,6 @@ func gzipBody(data []byte) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
-}
-
-type debugHttpCall struct {
-	Url     string
-	Query   url.Values
-	Headers http.Header
 }
 
 type requestPostPayloadType int
@@ -221,8 +227,6 @@ func (m *ApiClient) doRequestBody(
 	body io.Reader,
 	options ...httpOptions,
 ) (*http.Response, error) {
-	var debugHttpCall debugHttpCall
-
 	request, err := http.NewRequestWithContext(ctx, method, requestUrl, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
@@ -232,10 +236,7 @@ func (m *ApiClient) doRequestBody(
 		o(request)
 	}
 
-	debugHttpCall.Url = request.URL.String()
-	debugHttpCall.Query = request.URL.Query()
-	debugHttpCall.Headers = request.Header
-	if err := m.debugHttpCall.writeDebug(debugHttpCall); err != nil {
+	if err := m.debugHttpCall.writeDebug(request); err != nil {
 		return nil, fmt.Errorf("failed to write debug_http call: %w", err)
 	}
 

@@ -156,7 +156,7 @@ func ServiceAccount(projectID int, username, secret string) Options {
 	}
 }
 
-// DebugHttpCalls streams json payload information and url information for debugging purposes
+// DebugHttpCalls streams payload information and url information for debugging purposes
 func DebugHttpCalls(writer io.Writer) Options {
 	return func(mixpanel *ApiClient) {
 		mixpanel.debugHttpCall = &debugHttpCalls{
