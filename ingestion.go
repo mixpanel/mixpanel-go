@@ -126,7 +126,7 @@ func (e ImportGenericError) Error() string {
 
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
-// Need to provide project id and api secret or service account
+// Need to provide project id a service account, project token or api secret to the client
 func (a *ApiClient) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
 	if len(events) > MaxImportEvents {
 		return nil, fmt.Errorf("max import events is %d", MaxImportEvents)
@@ -149,7 +149,7 @@ func (a *ApiClient) Import(ctx context.Context, events []*Event, options ImportO
 		return nil, fmt.Errorf("failed to create request body: %w", err)
 	}
 
-	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), a.useServiceAccountOrProjectSecret()}
+	httpOptions := []httpOptions{applicationJsonHeader(), addQueryParams(values), acceptJson(), a.importAuthOptions()}
 	if options.Compression == Gzip {
 		httpOptions = append(httpOptions, gzipHeader())
 	}

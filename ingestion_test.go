@@ -247,8 +247,10 @@ func TestImport(t *testing.T) {
 			auth := req.Header.Get("authorization")
 			if client.serviceAccount != nil {
 				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.serviceAccount.Username+":"+client.serviceAccount.Secret)))
-			} else {
+			} else if client.apiSecret != "" {
 				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.apiSecret+":")))
+			} else {
+				require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(client.token+":")))
 			}
 
 			compress := req.Header.Get("content-encoding")
@@ -302,13 +304,35 @@ func TestImport(t *testing.T) {
 		require.Equal(t, 1, success.NumRecordsImported)
 	})
 
-	t.Run("api-secret-auth", func(t *testing.T) {
+	t.Run("api-secret", func(t *testing.T) {
 		query := url.Values{}
 		query.Add("verbose", "1")
 		query.Add("strict", "1")
 
 		ctx := context.Background()
-		mp := NewApiClient("token", ApiSecret("api-secret"))
+		mp := NewApiClient("token", ApiSecret("some-secret"))
+		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
+
+		setupHttpEndpointTest(t, mp, query, func(r []*Event) {
+			require.Equal(t, events, r)
+		}, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code": 200,"num_records_imported": 1,"status": 1}`)),
+		})
+
+		success, err := mp.Import(ctx, events, ImportOptionsRecommend)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, success.NumRecordsImported)
+	})
+
+	t.Run("api-token", func(t *testing.T) {
+		query := url.Values{}
+		query.Add("verbose", "1")
+		query.Add("strict", "1")
+
+		ctx := context.Background()
+		mp := NewApiClient("token")
 		events := []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}
 
 		setupHttpEndpointTest(t, mp, query, func(r []*Event) {
