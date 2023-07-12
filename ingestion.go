@@ -299,8 +299,8 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 			Set:        p.Properties,
 			IP:         p.shouldGeoLookupIp(),
 		}
-		fmt.Println(p.shouldGeoLookupIp())
 	}
+
 	return a.doPeopleRequest(ctx, payloads, peopleSetURL)
 }
 
