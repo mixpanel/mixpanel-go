@@ -1,4 +1,4 @@
-![Dancing Gopher](https://github.com/jmhobbs/party-gopher/blob/master/dancing-gopher.gif?raw=true)
+![Dancing Gopher](https://github.com/mixpanel/mixpanel-go/assets/71290498/90ba7116-f95c-41a2-9e1b-5813e6a55b53)
 
 #  Mixpanel Go SDK
 
