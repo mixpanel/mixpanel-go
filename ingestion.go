@@ -13,7 +13,7 @@ import (
 const (
 	// https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
 
-	MaxTrackEvents  = 50
+	MaxTrackEvents  = 2_000
 	MaxImportEvents = 2_000
 
 	// https://developer.mixpanel.com/reference/user-profile-limits
