@@ -23,6 +23,6 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - run: go version
       - run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
