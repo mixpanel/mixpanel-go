@@ -196,24 +196,24 @@ func (a *ApiClient) Import(ctx context.Context, events []*Event, options ImportO
 	}
 }
 
-type PeopleReveredProperties string
+type PeopleReservedProperties string
 
 const (
 	//https://docs.mixpanel.com/docs/tracking/how-tos/user-profiles#reserved-properties
 
-	PeopleEmailProperty           PeopleReveredProperties = "$email"
-	PeoplePhoneProperty           PeopleReveredProperties = "$phone"
-	PeopleFirstNameProperty       PeopleReveredProperties = "$first_name"
-	PeopleLastNameProperty        PeopleReveredProperties = "$last_name"
-	PeopleNameProperty            PeopleReveredProperties = "$name"
-	PeopleAvatarProperty          PeopleReveredProperties = "$avatar"
-	PeopleCreatedProperty         PeopleReveredProperties = "$created"
-	PeopleCityProperty            PeopleReveredProperties = "$city"
-	PeopleRegionProperty          PeopleReveredProperties = "$region"
-	PeopleCountryCodeProperty     PeopleReveredProperties = "$country_code"
-	PeopleTimezoneProperty        PeopleReveredProperties = "$timezone"
-	PeopleBucketProperty          PeopleReveredProperties = "$bucket"
-	PeopleGeolocationByIpProperty PeopleReveredProperties = "$ip"
+	PeopleEmailProperty           PeopleReservedProperties = "$email"
+	PeoplePhoneProperty           PeopleReservedProperties = "$phone"
+	PeopleFirstNameProperty       PeopleReservedProperties = "$first_name"
+	PeopleLastNameProperty        PeopleReservedProperties = "$last_name"
+	PeopleNameProperty            PeopleReservedProperties = "$name"
+	PeopleAvatarProperty          PeopleReservedProperties = "$avatar"
+	PeopleCreatedProperty         PeopleReservedProperties = "$created"
+	PeopleCityProperty            PeopleReservedProperties = "$city"
+	PeopleRegionProperty          PeopleReservedProperties = "$region"
+	PeopleCountryCodeProperty     PeopleReservedProperties = "$country_code"
+	PeopleTimezoneProperty        PeopleReservedProperties = "$timezone"
+	PeopleBucketProperty          PeopleReservedProperties = "$bucket"
+	PeopleGeolocationByIpProperty PeopleReservedProperties = "$ip"
 )
 
 type PeopleProperties struct {
@@ -234,7 +234,7 @@ func NewPeopleProperties(distinctID string, properties map[string]any) *PeoplePr
 	}
 }
 
-func (p *PeopleProperties) SetReservedProperty(property PeopleReveredProperties, value any) {
+func (p *PeopleProperties) SetReservedProperty(property PeopleReservedProperties, value any) {
 	p.Properties[string(property)] = value
 }
 
