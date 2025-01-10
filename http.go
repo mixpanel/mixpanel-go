@@ -71,6 +71,12 @@ func applicationFormData() httpOptions {
 	}
 }
 
+func textCSVHeader() httpOptions {
+	return func(req *http.Request) {
+		req.Header.Set(contentTypeHeader, contentTypeTextCSV)
+	}
+}
+
 func (m *ApiClient) importAuthOptions() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {

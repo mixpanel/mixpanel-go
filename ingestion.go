@@ -1,7 +1,9 @@
 package mixpanel
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -42,6 +44,9 @@ const (
 	groupsRemoveFromListPropertyUrl = "/groups#group-remove-from-list"
 	groupsUnionListPropertyUrl      = "/groups#group-union"
 	groupsDeleteGroupUrl            = "/groups#group-delete"
+
+	// Lookup table urls
+	lookupTableReplaceUrl = "/lookup-tables"
 )
 
 // Track calls the Track endpoint
@@ -571,4 +576,45 @@ func (a *ApiClient) GroupDelete(ctx context.Context, groupKey, groupID string) e
 	}
 
 	return a.doPeopleRequest(ctx, payload, groupsDeleteGroupUrl)
+}
+
+// LookupTableReplace calls the lookup tables API to replace the table content
+// https://developer.mixpanel.com/reference/replace-lookup-table
+// Need to provide project id and service account to the client
+func (a *ApiClient) LookupTableReplace(ctx context.Context, lookupTableID string, table [][]string) error {
+	if a.serviceAccount == nil {
+		return fmt.Errorf("lookup tables API requires service account")
+	}
+	query := url.Values{
+		"project_id": []string{strconv.Itoa(a.projectID)},
+	}
+
+	var requestBody bytes.Buffer
+	writer := csv.NewWriter(&requestBody)
+
+	if err := writer.WriteAll(table); err != nil {
+		return err
+	}
+
+	writer.Flush()
+
+	httpOptions := []httpOptions{addQueryParams(query), textCSVHeader(), acceptJson(), a.importAuthOptions()}
+	response, err := a.doRequestBody(
+		ctx,
+		http.MethodPut,
+		fmt.Sprintf("%s%s/%s", a.apiEndpoint, lookupTableReplaceUrl, lookupTableID),
+		&requestBody,
+		httpOptions...,
+	)
+
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return parseVerboseApiError(response.Body)
+	}
+
+	return nil
 }

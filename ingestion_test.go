@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1095,4 +1096,105 @@ func TestGroupDelete(t *testing.T) {
 	}, peopleAndGroupSuccess())
 
 	require.NoError(t, mp.GroupDelete(ctx, "group-key", "group-id"))
+}
+
+func TestLookupTableReplace(t *testing.T) {
+	setupHttpEndpointTest := func(t *testing.T, client *ApiClient, lookupTableID string, testPayload func([][]string), httpResponse *http.Response) {
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+
+		httpmock.RegisterResponder(http.MethodPut, fmt.Sprintf("%s%s/%s", client.apiEndpoint, lookupTableReplaceUrl, lookupTableID), func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, req.Header.Get("content-type"), "text/csv")
+			require.Equal(t, req.Header.Get("accept"), "application/json")
+
+			csvReader := csv.NewReader(req.Body)
+			r, err := csvReader.ReadAll()
+			require.NoError(t, err)
+			testPayload(r)
+
+			return httpResponse, nil
+		})
+	}
+
+	lookupTableID := "lookupTableID"
+	table := [][]string{
+		{
+			"header 1", "header 2",
+		},
+		{
+			"row_1_col_1", "row_1_col2",
+		},
+		{
+			"row_2_col_1", "row_2_col2",
+		},
+	}
+
+	replaceSuccess := func() *http.Response {
+		body := `
+			{
+			  "code": 200,
+			  "status": "OK"
+			}
+			`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+
+	t.Run("can replace a lookup table", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("", ServiceAccount(0, "usernamer", "secret"))
+
+		setupHttpEndpointTest(t, mp, lookupTableID, func(r [][]string) {
+			require.Len(t, r, 3)
+			require.ElementsMatch(t, table, r)
+		}, replaceSuccess())
+
+		require.NoError(t, mp.LookupTableReplace(ctx, lookupTableID, table))
+	})
+
+	t.Run("eu data residency works correctly", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("", ServiceAccount(0, "usernamer", "secret"), EuResidency())
+
+		setupHttpEndpointTest(t, mp, lookupTableID, func(r [][]string) {
+			require.Len(t, r, 3)
+			require.ElementsMatch(t, table, r)
+		}, replaceSuccess())
+
+		require.NoError(t, mp.LookupTableReplace(ctx, lookupTableID, table))
+	})
+
+	t.Run("return error when service account is not provided", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("")
+
+		setupHttpEndpointTest(t, mp, lookupTableID, func(r [][]string) {
+			require.Len(t, r, 3)
+			require.ElementsMatch(t, table, r)
+		}, replaceSuccess())
+
+		require.Error(t, mp.LookupTableReplace(ctx, lookupTableID, table))
+	})
+
+	t.Run("replace call failed and return error", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("", ServiceAccount(0, "usernamer", "secret"))
+
+		setupHttpEndpointTest(t, mp, lookupTableID, func(r [][]string) {
+			require.Len(t, r, 3)
+			require.ElementsMatch(t, table, r)
+		}, &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Body: io.NopCloser(strings.NewReader(`
+			{
+				"error": "some error occurred",
+				"status": 0
+			  }
+			`)),
+		})
+
+		require.Error(t, mp.LookupTableReplace(ctx, lookupTableID, table))
+	})
 }
