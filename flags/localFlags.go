@@ -353,7 +353,6 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil && err == nil {
 			err = fmt.Errorf("failed to close response body: %w", cerr)
