@@ -342,7 +342,9 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("traceparent", generateTraceparent())
+	if traceparent, err := generateTraceparent(); err == nil {
+		req.Header.Set("traceparent", traceparent)
+	}
 
 	auth := base64.StdEncoding.EncodeToString([]byte(p.token + ":"))
 	req.Header.Set("Authorization", "Basic "+auth)

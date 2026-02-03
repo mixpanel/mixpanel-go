@@ -33,14 +33,18 @@ func normalizedHash(key, salt string) float64 {
 
 // generateTraceparent generates a W3C traceparent header for distributed tracing
 // Format: 00-{trace-id}-{parent-id}-{trace-flags}
-func generateTraceparent() string {
+func generateTraceparent() (string, error) {
 	traceID := make([]byte, 16)
 	spanID := make([]byte, 8)
 
-	rand.Read(traceID)
-	rand.Read(spanID)
+	if _, err := rand.Read(traceID); err != nil {
+		return "", err
+	}
+	if _, err := rand.Read(spanID); err != nil {
+		return "", err
+	}
 
-	return "00-" + hex.EncodeToString(traceID) + "-" + hex.EncodeToString(spanID) + "-01"
+	return "00-" + hex.EncodeToString(traceID) + "-" + hex.EncodeToString(spanID) + "-01", nil
 }
 
 // lowercaseKeysAndValues recursively lowercases all string keys and values in a map

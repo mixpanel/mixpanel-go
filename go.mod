@@ -1,6 +1,6 @@
 module github.com/mixpanel/mixpanel-go
 
-go 1.18
+go 1.19
 
 require (
 	github.com/diegoholiveira/jsonlogic/v3 v3.9.0

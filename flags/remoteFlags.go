@@ -111,7 +111,7 @@ func (p *RemoteFeatureFlagsProvider) TrackExposureEvent(ctx context.Context, fla
 	p.trackExposure(flagKey, variant, flagContext, nil)
 }
 
-func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext FlagContext, flagKey *string) (*remoteFlagsResponse, error) {
+func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext FlagContext, flagKey *string) (result *remoteFlagsResponse, err error) {
 	u := url.URL{
 		Scheme: "https",
 		Host:   p.apiHost,
@@ -141,7 +141,9 @@ func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("traceparent", generateTraceparent())
+	if traceparent, err := generateTraceparent(); err == nil {
+		req.Header.Set("traceparent", traceparent)
+	}
 
 	auth := base64.StdEncoding.EncodeToString([]byte(p.token + ":"))
 	req.Header.Set("Authorization", "Basic "+auth)
@@ -150,17 +152,20 @@ func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close response body: %w", cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	var result remoteFlagsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return &result, nil
+	return result, nil
 }
