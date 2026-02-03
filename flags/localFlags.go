@@ -354,6 +354,11 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close response body: %w", cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -379,4 +384,3 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 
 	return nil
 }
-

@@ -176,7 +176,7 @@ func WithLocalFlags(config flags.LocalFlagsConfig) Options {
 	return func(mixpanel *ApiClient) {
 		tracker := func(distinctID string, eventName string, props map[string]any) {
 			event := mixpanel.NewEvent(eventName, distinctID, props)
-			mixpanel.Track(context.Background(), []*Event{event})
+			_ = mixpanel.Track(context.Background(), []*Event{event})
 		}
 		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, config, tracker)
 	}
@@ -187,7 +187,7 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig) Options {
 	return func(mixpanel *ApiClient) {
 		tracker := func(distinctID string, eventName string, props map[string]any) {
 			event := mixpanel.NewEvent(eventName, distinctID, props)
-			mixpanel.Track(context.Background(), []*Event{event})
+			_ = mixpanel.Track(context.Background(), []*Event{event})
 		}
 		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, config, tracker)
 	}
@@ -271,24 +271,4 @@ func (e *Event) AddIP(ip net.IP) {
 		return
 	}
 	e.Properties[propertyIP] = ip.String()
-}
-
-// NewLocalFeatureFlagsProvider creates a local feature flags provider using this client's token
-// The provider evaluates feature flags locally using cached definitions fetched from Mixpanel
-func (m *ApiClient) NewLocalFeatureFlagsProvider(config flags.LocalFlagsConfig) *flags.LocalFeatureFlagsProvider {
-	tracker := func(distinctID string, eventName string, props map[string]any) {
-		event := m.NewEvent(eventName, distinctID, props)
-		m.Track(context.Background(), []*Event{event})
-	}
-	return flags.NewLocalFeatureFlagsProvider(m.token, config, tracker)
-}
-
-// NewRemoteFeatureFlagsProvider creates a remote feature flags provider using this client's token
-// The provider evaluates feature flags via API requests
-func (m *ApiClient) NewRemoteFeatureFlagsProvider(config flags.RemoteFlagsConfig) *flags.RemoteFeatureFlagsProvider {
-	tracker := func(distinctID string, eventName string, props map[string]any) {
-		event := m.NewEvent(eventName, distinctID, props)
-		m.Track(context.Background(), []*Event{event})
-	}
-	return flags.NewRemoteFeatureFlagsProvider(m.token, config, tracker)
 }
