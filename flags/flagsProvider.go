@@ -89,7 +89,11 @@ func (p *featureFlagsProvider) callFlagsEndpoint(ctx context.Context, path strin
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close response body: %w", cerr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
