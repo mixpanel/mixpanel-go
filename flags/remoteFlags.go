@@ -2,10 +2,8 @@ package flags
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -111,61 +109,28 @@ func (p *RemoteFeatureFlagsProvider) TrackExposureEvent(ctx context.Context, fla
 	p.trackExposure(flagKey, variant, flagContext, nil)
 }
 
-func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext FlagContext, flagKey *string) (result *remoteFlagsResponse, err error) {
-	u := url.URL{
-		Scheme: "https",
-		Host:   p.apiHost,
-		Path:   flagsURLPath,
-	}
-
-	q := u.Query()
-	q.Set("token", p.token)
-	q.Set("mp_lib", goLib)
-	q.Set("$lib_version", p.version)
+func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext FlagContext, flagKey *string) (*remoteFlagsResponse, error) {
+	additionalParams := url.Values{}
 
 	contextJSON, err := json.Marshal(flagContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal context: %w", err)
 	}
-	q.Set("context", url.QueryEscape(string(contextJSON)))
+	additionalParams.Set("context", url.QueryEscape(string(contextJSON)))
 
 	if flagKey != nil {
-		q.Set("flag_key", *flagKey)
+		additionalParams.Set("flag_key", *flagKey)
 	}
 
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	body, err := p.callFlagsEndpoint(ctx, flagsURLPath, additionalParams)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	if traceparent, err := generateTraceparent(); err == nil {
-		req.Header.Set("traceparent", traceparent)
-	}
-
-	auth := base64.StdEncoding.EncodeToString([]byte(p.token + ":"))
-	req.Header.Set("Authorization", "Basic "+auth)
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("failed to close response body: %w", cerr)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var result remoteFlagsResponse
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return result, nil
+	return &result, nil
 }

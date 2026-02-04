@@ -2,13 +2,10 @@ package flags
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -324,48 +321,13 @@ func (p *LocalFeatureFlagsProvider) evaluateJSONLogicRule(rule map[string]any, f
 }
 
 func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) error {
-	u := url.URL{
-		Scheme: "https",
-		Host:   p.apiHost,
-		Path:   flagsDefinitionsURLPath,
-	}
-
-	q := u.Query()
-	q.Set("token", p.token)
-	q.Set("mp_lib", goLib)
-	q.Set("$lib_version", p.version)
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	body, err := p.callFlagsEndpoint(ctx, flagsDefinitionsURLPath, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if traceparent, err := generateTraceparent(); err == nil {
-		req.Header.Set("traceparent", traceparent)
-	}
-
-	auth := base64.StdEncoding.EncodeToString([]byte(p.token + ":"))
-	req.Header.Set("Authorization", "Basic "+auth)
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("failed to close response body: %w", cerr)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		return err
 	}
 
 	var result experimentationFlagsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
