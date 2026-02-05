@@ -30,13 +30,6 @@ type LocalFeatureFlagsProvider struct {
 
 // NewLocalFeatureFlagsProvider creates a new local feature flags provider
 func NewLocalFeatureFlagsProvider(token string, config LocalFlagsConfig, tracker Tracker) *LocalFeatureFlagsProvider {
-	client := config.HTTPClient
-	if client == nil {
-		client = &http.Client{
-			Timeout: config.RequestTimeout,
-		}
-	}
-
 	if config.APIHost == "" {
 		config.APIHost = defaultFlagsAPIHost
 	}
@@ -47,6 +40,12 @@ func NewLocalFeatureFlagsProvider(token string, config LocalFlagsConfig, tracker
 		config.PollingInterval = defaultPollingInterval
 	}
 
+	client := config.HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: config.RequestTimeout,
+		}
+	}
 	provider := &LocalFeatureFlagsProvider{
 		featureFlagsProvider: featureFlagsProvider{
 			token:          token,
@@ -107,6 +106,8 @@ func (p *LocalFeatureFlagsProvider) pollForDefinitions(ctx context.Context) {
 			if err := p.fetchFlagDefinitions(ctx); err != nil {
 				log.Printf("Error polling for flag definitions: %v", err)
 			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }

@@ -18,13 +18,6 @@ type RemoteFeatureFlagsProvider struct {
 
 // NewRemoteFeatureFlagsProvider creates a new remote feature flags provider
 func NewRemoteFeatureFlagsProvider(token string, config RemoteFlagsConfig, tracker Tracker) *RemoteFeatureFlagsProvider {
-	client := config.HTTPClient
-	if client == nil {
-		client = &http.Client{
-			Timeout: config.RequestTimeout,
-		}
-	}
-
 	if config.APIHost == "" {
 		config.APIHost = defaultFlagsAPIHost
 	}
@@ -32,6 +25,12 @@ func NewRemoteFeatureFlagsProvider(token string, config RemoteFlagsConfig, track
 		config.RequestTimeout = defaultRequestTimeout
 	}
 
+	client := config.HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: config.RequestTimeout,
+		}
+	}
 	return &RemoteFeatureFlagsProvider{
 		featureFlagsProvider: featureFlagsProvider{
 			token:          token,

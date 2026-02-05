@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -24,7 +25,12 @@ type featureFlagsProvider struct {
 // Manually tracks a feature flag exposure event to Mixpanel.
 func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVariant, flagContext FlagContext, latency *time.Duration) {
 	distinctID, ok := flagContext["distinct_id"].(string)
-	if !ok || p.tracker == nil {
+	if !ok {
+		log.Printf("Failed to track exposure since distinct_id missing or not a string")
+		return
+	}
+	if p.tracker == nil {
+		log.Printf("Failed to track exposure since tracker is nil")
 		return
 	}
 
