@@ -2,6 +2,7 @@ package flags
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -299,5 +300,48 @@ func TestRemoteFeatureFlagsProvider_RequestFormat(t *testing.T) {
 		traceparent := capturedRequest.Header.Get("traceparent")
 		require.NotEmpty(t, traceparent)
 		require.Contains(t, traceparent, "00-")
+	})
+
+	t.Run("correctly encodes special characters in context", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		config := DefaultRemoteFlagsConfig()
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
+
+		var capturedRequest *http.Request
+		variantKey := "enabled"
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			func(req *http.Request) (*http.Response, error) {
+				capturedRequest = req
+				return httpmock.NewJsonResponse(200, remoteFlagsResponse{
+					Code: 200,
+					Flags: map[string]*SelectedVariant{
+						"test-flag": {
+							VariantKey:   &variantKey,
+							VariantValue: true,
+						},
+					},
+				})
+			})
+
+		specialID := `user&id=1+2 "quoted"`
+		flagCtx := FlagContext{"distinct_id": specialID}
+
+		ctx := context.Background()
+		result, err := provider.GetVariantValue(ctx, "test-flag", false, flagCtx)
+		require.NoError(t, err)
+		require.Equal(t, true, result)
+
+		require.NotNil(t, capturedRequest)
+
+		contextParam := capturedRequest.URL.Query().Get("context")
+		require.NotEmpty(t, contextParam)
+
+		var decoded FlagContext
+		err = json.Unmarshal([]byte(contextParam), &decoded)
+		require.NoError(t, err)
+		require.Equal(t, specialID, decoded["distinct_id"])
 	})
 }

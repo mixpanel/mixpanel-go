@@ -23,6 +23,14 @@ func TestNormalizedHash(t *testing.T) {
 		require.NotEqual(t, hash1, hash3)
 	})
 
+	t.Run("matches known test vectors", func(t *testing.T) {
+		hash1 := normalizedHash("abc", "variant")
+		require.Equal(t, 0.72, hash1)
+
+		hash2 := normalizedHash("def", "variant")
+		require.Equal(t, 0.21, hash2)
+	})
+
 	t.Run("hash distribution", func(t *testing.T) {
 		var below50 int
 		for i := 0; i < 1000; i++ {
@@ -33,6 +41,29 @@ func TestNormalizedHash(t *testing.T) {
 		}
 		require.Greater(t, below50, 300)
 		require.Less(t, below50, 700)
+	})
+}
+
+func TestLocalFeatureFlagsProvider_AreFlagsReady(t *testing.T) {
+	t.Run("returns false before polling and true after", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
+
+		require.False(t, provider.AreFlagsReady())
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+			httpmock.NewJsonResponderOrPanic(200, experimentationFlagsResponse{Flags: []ExperimentationFlag{}}))
+
+		ctx := context.Background()
+		err := provider.StartPollingForDefinitions(ctx)
+		require.NoError(t, err)
+
+		require.True(t, provider.AreFlagsReady())
 	})
 }
 
