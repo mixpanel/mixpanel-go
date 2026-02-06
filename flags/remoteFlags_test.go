@@ -15,7 +15,7 @@ func TestRemoteFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		variantKey := "enabled"
 		response := remoteFlagsResponse{
@@ -42,7 +42,7 @@ func TestRemoteFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		response := remoteFlagsResponse{
 			Code:  200,
@@ -63,7 +63,7 @@ func TestRemoteFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
 			httpmock.NewStringResponder(500, "Internal Server Error"))
@@ -81,7 +81,7 @@ func TestRemoteFeatureFlagsProvider_IsEnabled(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		variantKey := "enabled"
 		response := remoteFlagsResponse{
@@ -108,7 +108,7 @@ func TestRemoteFeatureFlagsProvider_IsEnabled(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		variantKey := "disabled"
 		response := remoteFlagsResponse{
@@ -137,7 +137,7 @@ func TestRemoteFeatureFlagsProvider_GetAllVariants(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		key1 := "v1"
 		key2 := "v2"
@@ -165,7 +165,7 @@ func TestRemoteFeatureFlagsProvider_GetAllVariants(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
 			httpmock.NewStringResponder(500, "Internal Server Error"))
@@ -194,7 +194,7 @@ func TestRemoteFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 			trackedProps = props
 		}
 
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, tracker)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker)
 
 		variantKey := "enabled"
 		experimentID := "exp-123"
@@ -239,7 +239,7 @@ func TestRemoteFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 			trackCount++
 		}
 
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, tracker)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker)
 
 		variantKey := "enabled"
 		response := remoteFlagsResponse{
@@ -268,7 +268,7 @@ func TestRemoteFeatureFlagsProvider_RequestFormat(t *testing.T) {
 		defer httpmock.DeactivateAndReset()
 
 		config := DefaultRemoteFlagsConfig()
-		provider := NewRemoteFeatureFlagsProvider("test-token", config, nil)
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, nil)
 
 		var capturedRequest *http.Request
 

@@ -110,5 +110,5 @@ func (p *featureFlagsProvider) callFlagsEndpoint(ctx context.Context, path strin
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	return body, nil
+	return body, err
 }

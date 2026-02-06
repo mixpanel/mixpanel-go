@@ -25,11 +25,11 @@ type LocalFeatureFlagsProvider struct {
 
 	stopPolling    chan struct{}
 	pollingStopped chan struct{}
-	pollingStarted bool
+	pollingStarted atomic.Bool
 }
 
 // NewLocalFeatureFlagsProvider creates a new local feature flags provider
-func NewLocalFeatureFlagsProvider(token string, config LocalFlagsConfig, tracker Tracker) *LocalFeatureFlagsProvider {
+func NewLocalFeatureFlagsProvider(token string, version string, config LocalFlagsConfig, tracker Tracker) *LocalFeatureFlagsProvider {
 	if config.APIHost == "" {
 		config.APIHost = defaultFlagsAPIHost
 	}
@@ -70,8 +70,7 @@ func (p *LocalFeatureFlagsProvider) StartPollingForDefinitions(ctx context.Conte
 		return fmt.Errorf("initial flag definitions fetch failed: %w", err)
 	}
 
-	if p.config.EnablePolling && !p.pollingStarted {
-		p.pollingStarted = true
+	if p.config.EnablePolling && p.pollingStarted.CompareAndSwap(false, true) {
 		go p.pollForDefinitions(ctx)
 	}
 
@@ -80,10 +79,9 @@ func (p *LocalFeatureFlagsProvider) StartPollingForDefinitions(ctx context.Conte
 
 // StopPollingForDefinitions stops the background polling goroutine
 func (p *LocalFeatureFlagsProvider) StopPollingForDefinitions() {
-	if p.pollingStarted {
+	if p.pollingStarted.CompareAndSwap(true, false) {
 		close(p.stopPolling)
 		<-p.pollingStopped
-		p.pollingStarted = false
 	}
 }
 
@@ -113,39 +111,51 @@ func (p *LocalFeatureFlagsProvider) pollForDefinitions(ctx context.Context) {
 }
 
 // GetVariantValue returns the variant value for a flag
-func (p *LocalFeatureFlagsProvider) GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext FlagContext) any {
-	variant := p.GetVariant(ctx, flagKey, SelectedVariant{VariantValue: fallbackValue}, flagContext, true)
-	return variant.VariantValue
+func (p *LocalFeatureFlagsProvider) GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext FlagContext) (any, error) {
+	variant, err := p.GetVariant(ctx, flagKey, SelectedVariant{VariantValue: fallbackValue}, flagContext, true)
+	if err != nil {
+		return fallbackValue, err
+	}
+	return variant.VariantValue, nil
 }
 
 // IsEnabled returns true if the flag is enabled (variant value is exactly true)
-func (p *LocalFeatureFlagsProvider) IsEnabled(ctx context.Context, flagKey string, flagContext FlagContext) bool {
-	value := p.GetVariantValue(ctx, flagKey, false, flagContext)
-	return value == true
+func (p *LocalFeatureFlagsProvider) IsEnabled(ctx context.Context, flagKey string, flagContext FlagContext) (bool, error) {
+	value, err := p.GetVariantValue(ctx, flagKey, false, flagContext)
+	if err != nil {
+		return false, err
+	}
+	return value == true, nil
 }
 
 // GetVariant returns the complete variant for a flag
-func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey string, fallbackVariant SelectedVariant, flagContext FlagContext, reportExposure bool) SelectedVariant {
+func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey string, fallbackVariant SelectedVariant, flagContext FlagContext, reportExposure bool) (SelectedVariant, error) {
 	startTime := time.Now()
 
 	flags := p.flagDefinitions.Load()
 	flag, exists := (*flags)[flagKey]
 
 	if !exists {
-		return fallbackVariant
+		return fallbackVariant, nil
 	}
 
 	contextValue, ok := flagContext[flag.Context]
 	if !ok {
-		return fallbackVariant
+		return fallbackVariant, nil
 	}
 
 	var selectedVariant *SelectedVariant
 
 	if testVariant := p.getVariantOverrideForTestUser(flag, flagContext); testVariant != nil {
 		selectedVariant = testVariant
-	} else if rollout := p.getAssignedRollout(flag, contextValue, flagContext); rollout != nil {
-		selectedVariant = p.getAssignedVariant(flag, contextValue, flagKey, rollout)
+	} else {
+		rollout, err := p.getAssignedRollout(flag, contextValue, flagContext)
+		if err != nil {
+			return fallbackVariant, err
+		}
+		if rollout != nil {
+			selectedVariant = p.getAssignedVariant(flag, contextValue, flagKey, rollout)
+		}
 	}
 
 	if selectedVariant != nil {
@@ -153,14 +163,14 @@ func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey stri
 			latency := time.Since(startTime)
 			p.trackExposure(flagKey, *selectedVariant, flagContext, &latency)
 		}
-		return *selectedVariant
+		return *selectedVariant, nil
 	}
 
-	return fallbackVariant
+	return fallbackVariant, nil
 }
 
 // GetAllVariants returns all flag variants for the context (no exposure tracking)
-func (p *LocalFeatureFlagsProvider) GetAllVariants(ctx context.Context, flagContext FlagContext) map[string]SelectedVariant {
+func (p *LocalFeatureFlagsProvider) GetAllVariants(ctx context.Context, flagContext FlagContext) (map[string]SelectedVariant, error) {
 	variants := make(map[string]SelectedVariant)
 
 	flags := p.flagDefinitions.Load()
@@ -170,13 +180,16 @@ func (p *LocalFeatureFlagsProvider) GetAllVariants(ctx context.Context, flagCont
 	}
 
 	for _, flagKey := range flagKeys {
-		variant := p.GetVariant(ctx, flagKey, SelectedVariant{}, flagContext, false)
+		variant, err := p.GetVariant(ctx, flagKey, SelectedVariant{}, flagContext, false)
+		if err != nil {
+			return nil, err
+		}
 		if variant.VariantKey != nil {
 			variants[flagKey] = variant
 		}
 	}
 
-	return variants
+	return variants, nil
 }
 
 // TrackExposureEvent manually tracks an exposure event
@@ -202,7 +215,7 @@ func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *Experime
 	return p.getMatchingVariant(variantKey, flag, true)
 }
 
-func (p *LocalFeatureFlagsProvider) getAssignedRollout(flag *ExperimentationFlag, contextValue any, flagContext FlagContext) *Rollout {
+func (p *LocalFeatureFlagsProvider) getAssignedRollout(flag *ExperimentationFlag, contextValue any, flagContext FlagContext) (*Rollout, error) {
 	for i, rollout := range flag.Ruleset.Rollout {
 		var salt string
 		if flag.HashSalt != nil {
@@ -213,11 +226,17 @@ func (p *LocalFeatureFlagsProvider) getAssignedRollout(flag *ExperimentationFlag
 
 		rolloutHash := normalizedHash(fmt.Sprintf("%v", contextValue), salt)
 
-		if rolloutHash < rollout.RolloutPercentage && p.isRuntimeEvaluationSatisfied(&rollout, flagContext) {
-			return &rollout
+		if rolloutHash < rollout.RolloutPercentage {
+			satisfied, err := p.isRuntimeEvaluationSatisfied(&rollout, flagContext)
+			if err != nil {
+				return nil, err
+			}
+			if satisfied {
+				return &rollout, nil
+			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func (p *LocalFeatureFlagsProvider) getAssignedVariant(flag *ExperimentationFlag, contextValue any, flagKey string, rollout *Rollout) *SelectedVariant {
@@ -290,18 +309,18 @@ func (p *LocalFeatureFlagsProvider) getMatchingVariant(variantKey string, flag *
 	return nil
 }
 
-func (p *LocalFeatureFlagsProvider) isRuntimeEvaluationSatisfied(rollout *Rollout, flagContext FlagContext) bool {
+func (p *LocalFeatureFlagsProvider) isRuntimeEvaluationSatisfied(rollout *Rollout, flagContext FlagContext) (bool, error) {
 	if rollout.RuntimeEvaluationRule != nil {
 		return p.evaluateJSONLogicRule(rollout.RuntimeEvaluationRule, flagContext)
 	}
 
-	return true
+	return true, nil
 }
 
-func (p *LocalFeatureFlagsProvider) evaluateJSONLogicRule(rule map[string]any, flagContext FlagContext) bool {
+func (p *LocalFeatureFlagsProvider) evaluateJSONLogicRule(rule map[string]any, flagContext FlagContext) (bool, error) {
 	customProps, ok := flagContext["custom_properties"].(map[string]any)
 	if !ok {
-		return false
+		return false, nil
 	}
 
 	normalizedProps := lowercaseKeysAndValues(customProps)
@@ -309,15 +328,14 @@ func (p *LocalFeatureFlagsProvider) evaluateJSONLogicRule(rule map[string]any, f
 
 	result, err := jsonlogic.ApplyInterface(normalizedRule, normalizedProps)
 	if err != nil {
-		log.Printf("Error evaluating JSON Logic rule: %v", err)
-		return false
+		return false, fmt.Errorf("Failed to evaluate custom properties: %w", err)
 	}
 
 	switch v := result.(type) {
 	case bool:
-		return v
+		return v, nil
 	default:
-		return false
+		return false, fmt.Errorf("Failed to evaluate custom properties")
 	}
 }
 

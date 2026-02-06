@@ -6,8 +6,7 @@ import (
 )
 
 const (
-	version = "v1.2.0"
-	goLib   = "go"
+	goLib = "go"
 
 	exposureEventName       = "$experiment_started"
 	flagsDefinitionsURLPath = "/flags/definitions"

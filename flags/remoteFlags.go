@@ -17,7 +17,7 @@ type RemoteFeatureFlagsProvider struct {
 }
 
 // NewRemoteFeatureFlagsProvider creates a new remote feature flags provider
-func NewRemoteFeatureFlagsProvider(token string, config RemoteFlagsConfig, tracker Tracker) *RemoteFeatureFlagsProvider {
+func NewRemoteFeatureFlagsProvider(token string, version string, config RemoteFlagsConfig, tracker Tracker) *RemoteFeatureFlagsProvider {
 	if config.APIHost == "" {
 		config.APIHost = defaultFlagsAPIHost
 	}
@@ -115,7 +115,7 @@ func (p *RemoteFeatureFlagsProvider) fetchFlags(ctx context.Context, flagContext
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal context: %w", err)
 	}
-	additionalParams.Set("context", url.QueryEscape(string(contextJSON)))
+	additionalParams.Set("context", string(contextJSON))
 
 	if flagKey != nil {
 		additionalParams.Set("flag_key", *flagKey)

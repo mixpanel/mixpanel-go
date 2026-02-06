@@ -178,7 +178,7 @@ func WithLocalFlags(config flags.LocalFlagsConfig) Options {
 			event := mixpanel.NewEvent(eventName, distinctID, props)
 			_ = mixpanel.Track(context.Background(), []*Event{event})
 		}
-		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, config, tracker)
+		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, version, config, tracker)
 	}
 }
 
@@ -189,7 +189,7 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig) Options {
 			event := mixpanel.NewEvent(eventName, distinctID, props)
 			_ = mixpanel.Track(context.Background(), []*Event{event})
 		}
-		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, config, tracker)
+		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, tracker)
 	}
 }
 

@@ -44,7 +44,7 @@ func TestLocalFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
 			httpmock.NewJsonResponderOrPanic(200, experimentationFlagsResponse{Flags: []ExperimentationFlag{}}))
@@ -53,7 +53,8 @@ func TestLocalFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		result := provider.GetVariantValue(ctx, "nonexistent", "fallback", FlagContext{"distinct_id": "user1"})
+		result, err := provider.GetVariantValue(ctx, "nonexistent", "fallback", FlagContext{"distinct_id": "user1"})
+		require.NoError(t, err)
 		require.Equal(t, "fallback", result)
 	})
 
@@ -64,7 +65,7 @@ func TestLocalFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -94,7 +95,8 @@ func TestLocalFeatureFlagsProvider_GetVariantValue(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		result := provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "user1"})
+		result, err := provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "user1"})
+		require.NoError(t, err)
 		require.NotEqual(t, "fallback", result)
 	})
 }
@@ -107,7 +109,7 @@ func TestLocalFeatureFlagsProvider_IsEnabled(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -136,7 +138,8 @@ func TestLocalFeatureFlagsProvider_IsEnabled(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		result := provider.IsEnabled(ctx, "bool-flag", FlagContext{"distinct_id": "user1"})
+		result, err := provider.IsEnabled(ctx, "bool-flag", FlagContext{"distinct_id": "user1"})
+		require.NoError(t, err)
 		require.True(t, result)
 	})
 
@@ -147,7 +150,7 @@ func TestLocalFeatureFlagsProvider_IsEnabled(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
 			httpmock.NewJsonResponderOrPanic(200, experimentationFlagsResponse{Flags: []ExperimentationFlag{}}))
@@ -156,7 +159,8 @@ func TestLocalFeatureFlagsProvider_IsEnabled(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		result := provider.IsEnabled(ctx, "nonexistent", FlagContext{"distinct_id": "user1"})
+		result, err := provider.IsEnabled(ctx, "nonexistent", FlagContext{"distinct_id": "user1"})
+		require.NoError(t, err)
 		require.False(t, result)
 	})
 }
@@ -174,7 +178,7 @@ func TestLocalFeatureFlagsProvider_TestUserOverride(t *testing.T) {
 			trackedEvents = append(trackedEvents, props)
 		}
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, tracker)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -209,7 +213,8 @@ func TestLocalFeatureFlagsProvider_TestUserOverride(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		result := provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "qa-user"})
+		result, err := provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "qa-user"})
+		require.NoError(t, err)
 		require.Equal(t, "test-value", result)
 
 		require.Len(t, trackedEvents, 1)
@@ -225,7 +230,7 @@ func TestLocalFeatureFlagsProvider_RuntimeEvaluation(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -259,16 +264,18 @@ func TestLocalFeatureFlagsProvider_RuntimeEvaluation(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		result := provider.GetVariantValue(ctx, "jsonlogic-flag", "fallback", FlagContext{
+		result, err := provider.GetVariantValue(ctx, "jsonlogic-flag", "fallback", FlagContext{
 			"distinct_id":       "user1",
 			"custom_properties": map[string]any{"plan": "premium"},
 		})
+		require.NoError(t, err)
 		require.Equal(t, "enabled", result)
 
-		result = provider.GetVariantValue(ctx, "jsonlogic-flag", "fallback", FlagContext{
+		result, err = provider.GetVariantValue(ctx, "jsonlogic-flag", "fallback", FlagContext{
 			"distinct_id":       "user2",
 			"custom_properties": map[string]any{"plan": "free"},
 		})
+		require.NoError(t, err)
 		require.Equal(t, "fallback", result)
 	})
 }
@@ -281,7 +288,7 @@ func TestLocalFeatureFlagsProvider_GetAllVariants(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -313,7 +320,8 @@ func TestLocalFeatureFlagsProvider_GetAllVariants(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		variants := provider.GetAllVariants(ctx, FlagContext{"distinct_id": "user1"})
+		variants, err := provider.GetAllVariants(ctx, FlagContext{"distinct_id": "user1"})
+		require.NoError(t, err)
 		require.Len(t, variants, 2)
 		require.Contains(t, variants, "flag-1")
 		require.Contains(t, variants, "flag-2")
@@ -338,7 +346,7 @@ func TestLocalFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 			trackedProps = props
 		}
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, tracker)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
 
 		experimentID := "exp-123"
 		isActive := true
@@ -366,7 +374,8 @@ func TestLocalFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		_ = provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "user123"})
+		_, err = provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "user123"})
+		require.NoError(t, err)
 
 		require.Equal(t, "user123", trackedDistinctID)
 		require.Equal(t, "$experiment_started", trackedEventName)
@@ -389,7 +398,7 @@ func TestLocalFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 			trackCount++
 		}
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, tracker)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -412,7 +421,8 @@ func TestLocalFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 		err := provider.StartPollingForDefinitions(ctx)
 		require.NoError(t, err)
 
-		_ = provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, false)
+		_, err = provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, false)
+		require.NoError(t, err)
 		require.Equal(t, 0, trackCount)
 	})
 }
@@ -425,7 +435,7 @@ func TestLocalFeatureFlagsProvider_VariantSplits(t *testing.T) {
 		config := DefaultLocalFlagsConfig()
 		config.EnablePolling = false
 
-		provider := NewLocalFeatureFlagsProvider("test-token", config, nil)
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
 
 		flags := experimentationFlagsResponse{
 			Flags: []ExperimentationFlag{
@@ -461,9 +471,10 @@ func TestLocalFeatureFlagsProvider_VariantSplits(t *testing.T) {
 
 		controlCount := 0
 		for i := 0; i < 100; i++ {
-			result := provider.GetVariant(ctx, "split-flag", SelectedVariant{}, FlagContext{
+			result, err := provider.GetVariant(ctx, "split-flag", SelectedVariant{}, FlagContext{
 				"distinct_id": json.Number(string(rune(i))),
 			}, false)
+			require.NoError(t, err)
 			if result.VariantValue == "control" {
 				controlCount++
 			}
