@@ -328,14 +328,14 @@ func (p *LocalFeatureFlagsProvider) evaluateJSONLogicRule(rule map[string]any, f
 
 	result, err := jsonlogic.ApplyInterface(normalizedRule, normalizedProps)
 	if err != nil {
-		return false, fmt.Errorf("Failed to evaluate custom properties: %w", err)
+		return false, fmt.Errorf("failed to evaluate custom properties: %w", err)
 	}
 
 	switch v := result.(type) {
 	case bool:
 		return v, nil
 	default:
-		return false, fmt.Errorf("Failed to evaluate custom properties")
+		return false, fmt.Errorf("failed to evaluate custom properties")
 	}
 }
 
