@@ -32,6 +32,9 @@ func InvokeLocalFlagsSample() {
 	}
 
 	// Get a variant value with a fallback
-	variantValue := client.LocalFlags.GetVariantValue(ctx, "new-feature", "default-value", userContext)
+	variantValue, err := client.LocalFlags.GetVariantValue(ctx, "new-feature", "default-value", userContext)
+	if err != nil {
+		log.Printf("Error getting variant: %v", err)
+	}
 	fmt.Printf("Variant value: %v\n", variantValue)
 }
