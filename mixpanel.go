@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/mixpanel/mixpanel-go/flags"
 )
 
 const (
-	version = "v1.2.0"
+	version = "v2.0.0-beta.1"
 
 	usEndpoint     = "https://api.mixpanel.com"
 	usDataEndpoint = "https://data.mixpanel.com"
@@ -102,6 +104,10 @@ type ApiClient struct {
 
 	serviceAccount *serviceAccount
 	debugHttpCall  *debugHttpCalls
+
+	// Feature flags providers
+	LocalFlags  *flags.LocalFeatureFlagsProvider
+	RemoteFlags *flags.RemoteFeatureFlagsProvider
 }
 
 type Options func(mixpanel *ApiClient)
@@ -162,6 +168,28 @@ func DebugHttpCalls(writer io.Writer) Options {
 		mixpanel.debugHttpCall = &debugHttpCalls{
 			writer: writer,
 		}
+	}
+}
+
+// WithLocalFlags configures a local feature flags provider for the client.
+func WithLocalFlags(config flags.LocalFlagsConfig) Options {
+	return func(mixpanel *ApiClient) {
+		tracker := func(distinctID string, eventName string, props map[string]any) {
+			event := mixpanel.NewEvent(eventName, distinctID, props)
+			_ = mixpanel.Track(context.Background(), []*Event{event})
+		}
+		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, version, config, tracker)
+	}
+}
+
+// WithRemoteFlags configures a remote feature flags provider for the client.
+func WithRemoteFlags(config flags.RemoteFlagsConfig) Options {
+	return func(mixpanel *ApiClient) {
+		tracker := func(distinctID string, eventName string, props map[string]any) {
+			event := mixpanel.NewEvent(eventName, distinctID, props)
+			_ = mixpanel.Track(context.Background(), []*Event{event})
+		}
+		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, tracker)
 	}
 }
 
