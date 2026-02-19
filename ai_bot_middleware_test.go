@@ -235,7 +235,7 @@ func TestBotClassificationMiddleware(t *testing.T) {
 		handler := BotClassificationMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Custom", "value")
 			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte("Created"))
+			_, _ = w.Write([]byte("Created"))
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("User-Agent", "GPTBot/1.2")
