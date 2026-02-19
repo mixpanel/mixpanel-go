@@ -51,7 +51,7 @@ func NewClassifier(additionalBots []BotEntry) *Classifier {
 
 // Classify checks a user-agent string against this classifier's bot database.
 func (c *Classifier) Classify(userAgent string) BotClassification {
-	if userAgent == "" {
+	if c == nil || userAgent == "" {
 		return BotClassification{}
 	}
 	for _, bot := range c.bots {

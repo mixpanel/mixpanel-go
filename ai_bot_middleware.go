@@ -27,7 +27,11 @@ func NewBotClassifyingIngestion(inner Ingestion) *BotClassifyingIngestion {
 }
 
 // NewBotClassifyingIngestionWithClassifier creates a wrapper with a custom Classifier.
+// If classifier is nil, the built-in default classifier is used.
 func NewBotClassifyingIngestionWithClassifier(inner Ingestion, classifier *Classifier) *BotClassifyingIngestion {
+	if classifier == nil {
+		classifier = defaultClassifier
+	}
 	return &BotClassifyingIngestion{inner: inner, classifier: classifier}
 }
 
