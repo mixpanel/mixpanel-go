@@ -1,4 +1,4 @@
-module github.com/mixpanel/mixpanel-go
+module github.com/mixpanel/mixpanel-go/v2
 
 go 1.19
 

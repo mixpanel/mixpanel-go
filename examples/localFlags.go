@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	mixpanel "github.com/mixpanel/mixpanel-go"
-	"github.com/mixpanel/mixpanel-go/flags"
+	mixpanel "github.com/mixpanel/mixpanel-go/v2"
+	"github.com/mixpanel/mixpanel-go/v2/flags"
 )
 
 func InvokeLocalFlagsSample() {

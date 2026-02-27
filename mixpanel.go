@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mixpanel/mixpanel-go/flags"
+	"github.com/mixpanel/mixpanel-go/v2/flags"
 )
 
 const (
-	version = "v2.0.0-beta.1"
+	version = "v2.0.0-beta.2"
 
 	usEndpoint     = "https://api.mixpanel.com"
 	usDataEndpoint = "https://data.mixpanel.com"
