@@ -3,7 +3,7 @@ package examples
 import (
 	"context"
 
-	"github.com/mixpanel/mixpanel-go"
+	"github.com/mixpanel/mixpanel-go/v2"
 )
 
 func PeopleUnionProperties() error {
