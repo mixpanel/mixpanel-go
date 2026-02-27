@@ -105,6 +105,8 @@ type ApiClient struct {
 	serviceAccount *serviceAccount
 	debugHttpCall  *debugHttpCalls
 
+	botClassifier *Classifier
+
 	// Feature flags providers
 	LocalFlags  *flags.LocalFeatureFlagsProvider
 	RemoteFlags *flags.RemoteFeatureFlagsProvider
@@ -190,6 +192,20 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig) Options {
 			_ = mixpanel.Track(context.Background(), []*Event{event})
 		}
 		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, tracker)
+	}
+}
+
+// WithBotClassification enables automatic AI bot classification on Track() calls.
+func WithBotClassification() Options {
+	return func(mixpanel *ApiClient) {
+		mixpanel.botClassifier = defaultClassifier
+	}
+}
+
+// WithBotClassificationCustom enables classification with a custom Classifier.
+func WithBotClassificationCustom(classifier *Classifier) Options {
+	return func(mixpanel *ApiClient) {
+		mixpanel.botClassifier = classifier
 	}
 }
 
