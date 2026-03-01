@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mixpanel/mixpanel-go"
+	"github.com/mixpanel/mixpanel-go/v2"
 )
 
 func Track() error {
