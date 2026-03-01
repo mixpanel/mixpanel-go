@@ -39,6 +39,7 @@ const (
 	contentTypeHeader          = "Content-Type"
 	contentTypeApplicationJson = "application/json"
 	contentTypeApplicationForm = "application/x-www-form-urlencoded"
+	contentTypeTextCSV         = "text/csv"
 )
 
 type Ingestion interface {
@@ -63,6 +64,9 @@ type Ingestion interface {
 	GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error
 	GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error
 	GroupDelete(ctx context.Context, groupKey, groupID string) error
+
+	// Lookup Tables
+	LookupTableReplace(ctx context.Context, lookupTableID string, table [][]string) error
 }
 
 var _ Ingestion = (*ApiClient)(nil)
