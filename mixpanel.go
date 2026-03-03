@@ -100,7 +100,6 @@ type ApiClient struct {
 
 	projectID int
 	token     string
-	apiSecret string
 
 	serviceAccount *serviceAccount
 	debugHttpCall  *debugHttpCalls
@@ -111,12 +110,6 @@ type ApiClient struct {
 }
 
 type Options func(mixpanel *ApiClient)
-
-func ApiSecret(apiSecret string) Options {
-	return func(mixpanel *ApiClient) {
-		mixpanel.apiSecret = apiSecret
-	}
-}
 
 // HttpClient will replace the http.DefaultClient with the provided http.Client
 func HttpClient(client *http.Client) Options {

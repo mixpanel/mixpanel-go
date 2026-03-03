@@ -74,25 +74,10 @@ func TestExport(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("event export with no service account", func(t *testing.T) {
-		// project_id param can't be send if using no service account for auth
-
-		httpmock.Activate()
-		defer httpmock.DeactivateAndReset()
-
-		queryParams := url.Values{}
-		queryParams.Add("from_date", "2023-01-01")
-		queryParams.Add("to_date", "2023-01-02")
-
-		httpmock.RegisterMatcherResponderWithQuery(http.MethodGet, fmt.Sprintf("%s%s", usDataEndpoint, exportUrl), queryParams, httpmock.Matcher{}, func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader("")),
-			}, nil
-		})
-
+	t.Run("event export with no service account returns error", func(t *testing.T) {
 		mp := NewApiClient("token")
 		_, err := mp.Export(ctx, parseDate(t, "2023-01-01"), parseDate(t, "2023-01-02"), ExportNoLimit, ExportNoEventFilter, ExportNoWhereFilter)
-		require.NoError(t, err)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "service account is required")
 	})
 }

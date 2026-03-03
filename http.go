@@ -75,32 +75,19 @@ func (m *ApiClient) importAuthOptions() httpOptions {
 	return func(req *http.Request) {
 		if m.serviceAccount != nil {
 			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
-		} else if m.apiSecret != "" {
-			req.SetBasicAuth(m.apiSecret, "")
 		} else {
 			req.SetBasicAuth(m.token, "")
 		}
 	}
 }
 
-func (m *ApiClient) useApiSecret() httpOptions {
-	return func(req *http.Request) {
-		req.SetBasicAuth(m.apiSecret, "")
-	}
-}
-
-// exportServiceAccount uses the service account if available and adds the query params
-// or falls back to apiSecret
+// exportServiceAccount uses the service account and adds the project_id query param
 func (m *ApiClient) exportServiceAccount() httpOptions {
 	return func(req *http.Request) {
-		if m.serviceAccount != nil {
-			req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
-			values := url.Values{}
-			values.Add("project_id", strconv.Itoa(m.projectID))
-			addQueryParams(values)(req)
-		} else {
-			req.SetBasicAuth(m.apiSecret, "")
-		}
+		req.SetBasicAuth(m.serviceAccount.Username, m.serviceAccount.Secret)
+		values := url.Values{}
+		values.Add("project_id", strconv.Itoa(m.projectID))
+		addQueryParams(values)(req)
 	}
 }
 

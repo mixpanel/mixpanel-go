@@ -22,7 +22,7 @@ func Export() error {
 	// fill in your token and project id and service account user name and secret
 	mp := mixpanel.NewApiClient(
 		"token",
-		// Can use either ApiSecret or ServiceAccount
+		// Use ServiceAccount for authentication
 		mixpanel.ServiceAccount(0, "user_name", "secret"),
 	)
 

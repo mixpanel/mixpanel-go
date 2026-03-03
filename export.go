@@ -21,6 +21,10 @@ const (
 // Export calls the Raw Export API
 // https://developer.mixpanel.com/reference/raw-event-export
 func (a *ApiClient) Export(ctx context.Context, fromDate, toDate time.Time, limit int, event, where string) ([]*Event, error) {
+	if a.serviceAccount == nil {
+		return nil, fmt.Errorf("service account is required for the export api")
+	}
+
 	query := url.Values{}
 	query.Add("from_date", fromDate.Format("2006-01-02"))
 	query.Add("to_date", toDate.Format("2006-01-02"))

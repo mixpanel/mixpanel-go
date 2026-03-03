@@ -54,10 +54,10 @@ func TestAlias(t *testing.T) {
 func TestMerge(t *testing.T) {
 	ctx := context.Background()
 
-	mp := NewApiClient("token")
+	mp := NewApiClient("token", ServiceAccount(117, "username", "secret"))
 	setupIdentityEndpoint(t, mp, mergeEndpoint, func(req *http.Request) {
 		auth := req.Header.Get("authorization")
-		require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(mp.apiSecret+":")))
+		require.Equal(t, auth, "Basic "+base64.StdEncoding.EncodeToString([]byte(mp.serviceAccount.Username+":"+mp.serviceAccount.Secret)))
 	}, func(body io.Reader) {
 		payload := &mergePayload{}
 		require.NoError(t, json.NewDecoder(body).Decode(&payload))
@@ -70,4 +70,12 @@ func TestMerge(t *testing.T) {
 	})
 
 	require.NoError(t, mp.Merge(ctx, "distinct-id-1", "distinct-id-2"))
+}
+
+func TestMergeWithoutServiceAccount(t *testing.T) {
+	ctx := context.Background()
+	mp := NewApiClient("token")
+	err := mp.Merge(ctx, "distinct-id-1", "distinct-id-2")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "service account is required")
 }
