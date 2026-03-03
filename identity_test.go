@@ -22,6 +22,8 @@ func setupIdentityEndpoint(t *testing.T, client *ApiClient, endpoint string, tes
 		require.Equal(t, req.Header.Get("content-type"), "application/x-www-form-urlencoded")
 		require.Equal(t, req.Header.Get("accept"), "text/plain")
 
+		testReq(req)
+
 		require.NoError(t, req.ParseForm())
 		data := req.Form.Get("data")
 		testPayload(strings.NewReader(data))

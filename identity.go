@@ -6,9 +6,8 @@ import (
 )
 
 const (
-	identityEndpoint = "/track#create-identity"
-	aliasEndpoint    = "/track#identity-create-alias"
-	mergeEndpoint    = "/import"
+	aliasEndpoint = "/track#identity-create-alias"
+	mergeEndpoint = "/import"
 )
 
 type aliasPayload struct {
