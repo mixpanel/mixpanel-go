@@ -11,8 +11,8 @@ func Merge() error {
 
 	mp := mixpanel.NewApiClient(
 		"token",
-		// Need to provide api secret if you want to use the merge api
-		mixpanel.ApiSecret("secret"),
+		// Need to provide a service account if you want to use the merge api
+		mixpanel.ServiceAccount(0, "user_name", "secret"),
 	)
 
 	// Can use the SetReversedProperty or make the reserved property yourself

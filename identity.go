@@ -1,6 +1,9 @@
 package mixpanel
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 const (
 	identityEndpoint = "/track#create-identity"
@@ -42,8 +45,12 @@ type mergeProperties struct {
 }
 
 // https://developer.mixpanel.com/reference/identity-merge
-// must provide api secret
+// must provide a service account
 func (a *ApiClient) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
+	if a.serviceAccount == nil {
+		return errors.New("service account is required for the merge api")
+	}
+
 	payload := &mergePayload{
 		Event: "$merge",
 		Properties: mergeProperties{
@@ -51,5 +58,5 @@ func (a *ApiClient) Merge(ctx context.Context, distinctID1, distinctID2 string) 
 		},
 	}
 
-	return a.doIdentifyRequest(ctx, payload, mergeEndpoint, a.useApiSecret())
+	return a.doIdentifyRequest(ctx, payload, mergeEndpoint, a.importAuthOptions())
 }
