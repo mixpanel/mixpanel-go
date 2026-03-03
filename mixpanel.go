@@ -20,6 +20,9 @@ const (
 	euEndpoint     = "https://api-eu.mixpanel.com"
 	euDataEndpoint = "https://data-eu.mixpanel.com"
 
+	inEndpoint     = "https://api-in.mixpanel.com"
+	inDataEndpoint = "https://data-in.mixpanel.com"
+
 	EmptyDistinctID = ""
 
 	propertyToken      = "token"
@@ -124,6 +127,15 @@ func EuResidency() Options {
 	return func(mixpanel *ApiClient) {
 		mixpanel.apiEndpoint = euEndpoint
 		mixpanel.dataEndpoint = euDataEndpoint
+	}
+}
+
+// InResidency sets the mixpanel client to use the india endpoints
+// Use for India Projects
+func InResidency() Options {
+	return func(mixpanel *ApiClient) {
+		mixpanel.apiEndpoint = inEndpoint
+		mixpanel.dataEndpoint = inDataEndpoint
 	}
 }
 
