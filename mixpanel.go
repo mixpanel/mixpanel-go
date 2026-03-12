@@ -114,7 +114,7 @@ type ApiClient struct {
 
 type Options func(mixpanel *ApiClient)
 
-// TrackerBuilder constructs a delegate that can be used to send exposure events to Mixpanel in a custom manner. 
+// TrackerBuilder constructs a function that can be used to send exposure events to Mixpanel in a custom manner.
 type TrackerBuilder func(client *ApiClient) flags.Tracker
 
 // HttpClient will replace the http.DefaultClient with the provided http.Client
@@ -189,15 +189,23 @@ func DefaultFlagsExposureTracker(client *ApiClient) flags.Tracker {
 }
 
 // WithLocalFlags configures a local feature flags provider for the client.
+// If builder is nil, DefaultFlagsExposureTracker is used.
 func WithLocalFlags(config flags.LocalFlagsConfig, builder TrackerBuilder) Options {
 	return func(mixpanel *ApiClient) {
+		if builder == nil {
+			builder = DefaultFlagsExposureTracker
+		}
 		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, version, config, builder(mixpanel))
 	}
 }
 
 // WithRemoteFlags configures a remote feature flags provider for the client.
+// If builder is nil, DefaultFlagsExposureTracker is used.
 func WithRemoteFlags(config flags.RemoteFlagsConfig, builder TrackerBuilder) Options {
 	return func(mixpanel *ApiClient) {
+		if builder == nil {
+			builder = DefaultFlagsExposureTracker
+		}
 		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, builder(mixpanel))
 	}
 }
