@@ -15,7 +15,7 @@ func InvokeLocalFlagsSample() {
 	config := flags.DefaultLocalFlagsConfig()
 	config.EnablePolling = true
 
-	client := mixpanel.NewApiClient("YOUR_PROJECT_TOKEN", mixpanel.WithLocalFlags(config))
+	client := mixpanel.NewApiClient("YOUR_PROJECT_TOKEN", mixpanel.WithLocalFlags(config, mixpanel.DefaultFlagsExposureTracker))
 
 	if err := client.LocalFlags.StartPollingForDefinitions(ctx); err != nil {
 		log.Fatalf("Failed to start polling: %v", err)

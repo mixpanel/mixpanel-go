@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	version = "v2.0.0-beta.2"
+	version = "v2.0.0"
 
 	usEndpoint     = "https://api.mixpanel.com"
 	usDataEndpoint = "https://data.mixpanel.com"
@@ -114,6 +114,9 @@ type ApiClient struct {
 
 type Options func(mixpanel *ApiClient)
 
+// TrackerBuilder constructs a delegate that can be used to send exposure events to Mixpanel in a custom manner. 
+type TrackerBuilder func(client *ApiClient) flags.Tracker
+
 // HttpClient will replace the http.DefaultClient with the provided http.Client
 func HttpClient(client *http.Client) Options {
 	return func(mixpanel *ApiClient) {
@@ -176,25 +179,26 @@ func DebugHttpCalls(writer io.Writer) Options {
 	}
 }
 
+// DefaultFlagsExposureTracker sends the exposure event synchronously.
+// To send asynchronously, wrap with a goroutine in your own TrackerBuilder.
+func DefaultFlagsExposureTracker(client *ApiClient) flags.Tracker {
+	return func(distinctID string, eventName string, props map[string]any) {
+		event := client.NewEvent(eventName, distinctID, props)
+		_ = client.Track(context.Background(), []*Event{event})
+	}
+}
+
 // WithLocalFlags configures a local feature flags provider for the client.
-func WithLocalFlags(config flags.LocalFlagsConfig) Options {
+func WithLocalFlags(config flags.LocalFlagsConfig, builder TrackerBuilder) Options {
 	return func(mixpanel *ApiClient) {
-		tracker := func(distinctID string, eventName string, props map[string]any) {
-			event := mixpanel.NewEvent(eventName, distinctID, props)
-			_ = mixpanel.Track(context.Background(), []*Event{event})
-		}
-		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, version, config, tracker)
+		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, version, config, builder(mixpanel))
 	}
 }
 
 // WithRemoteFlags configures a remote feature flags provider for the client.
-func WithRemoteFlags(config flags.RemoteFlagsConfig) Options {
+func WithRemoteFlags(config flags.RemoteFlagsConfig, builder TrackerBuilder) Options {
 	return func(mixpanel *ApiClient) {
-		tracker := func(distinctID string, eventName string, props map[string]any) {
-			event := mixpanel.NewEvent(eventName, distinctID, props)
-			_ = mixpanel.Track(context.Background(), []*Event{event})
-		}
-		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, tracker)
+		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, builder(mixpanel))
 	}
 }
 

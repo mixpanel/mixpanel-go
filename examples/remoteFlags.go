@@ -14,7 +14,7 @@ func InvokeRemoteFlagsSample() {
 
 	config := flags.DefaultRemoteFlagsConfig()
 
-	client := mixpanel.NewApiClient("YOUR_PROJECT_TOKEN", mixpanel.WithRemoteFlags(config))
+	client := mixpanel.NewApiClient("YOUR_PROJECT_TOKEN", mixpanel.WithRemoteFlags(config, mixpanel.DefaultFlagsExposureTracker))
 
 	// Define the user context for flag evaluation
 	userContext := flags.FlagContext{
