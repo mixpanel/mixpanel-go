@@ -188,9 +188,13 @@ func DefaultFlagsExposureTracker(client *ApiClient) flags.Tracker {
 	}
 }
 
-// WithLocalFlags configures a local feature flags provider for the client.
-// If builder is nil, DefaultFlagsExposureTracker is used.
-func WithLocalFlags(config flags.LocalFlagsConfig, builder TrackerBuilder) Options {
+// WithLocalFlags configures a local feature flags provider using the DefaultFlagsExposureTracker.
+func WithLocalFlags(config flags.LocalFlagsConfig) Options {
+	return WithLocalFlagsAndTracker(config, DefaultFlagsExposureTracker)
+}
+
+// WithLocalFlagsAndTracker configures a local feature flags provider with a custom TrackerBuilder.
+func WithLocalFlagsAndTracker(config flags.LocalFlagsConfig, builder TrackerBuilder) Options {
 	return func(mixpanel *ApiClient) {
 		if builder == nil {
 			builder = DefaultFlagsExposureTracker
