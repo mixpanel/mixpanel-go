@@ -147,6 +147,7 @@ func TestFloatEvaluation(t *testing.T) {
 	result := p.FloatEvaluation(ctx, "float-flag", 0.0, nil)
 	assert.Equal(t, 0.5, result.Value)
 	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, "half", result.Variant)
 }
 
 func TestFloatEvaluationTypeMismatch(t *testing.T) {
@@ -177,6 +178,7 @@ func TestIntEvaluation(t *testing.T) {
 	result := p.IntEvaluation(ctx, "int-flag", 0, nil)
 	assert.Equal(t, int64(42), result.Value)
 	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, "big", result.Variant)
 }
 
 func TestIntEvaluationTypeMismatch(t *testing.T) {
@@ -208,6 +210,7 @@ func TestObjectEvaluation(t *testing.T) {
 	result := p.ObjectEvaluation(ctx, "obj-flag", nil, nil)
 	assert.Equal(t, obj, result.Value)
 	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, "config", result.Variant)
 }
 
 func TestFlagNotFound(t *testing.T) {
@@ -420,6 +423,150 @@ func TestIntEvaluationNonWholeFloat(t *testing.T) {
 	result := p.IntEvaluation(ctx, "pi", 0, nil)
 	assert.Equal(t, int64(0), result.Value)
 	assert.Contains(t, result.ResolutionError.Error(), "TYPE_MISMATCH")
+}
+
+func TestFlagNotFoundString(t *testing.T) {
+	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.StringEvaluation(ctx, "missing-flag", "fallback", nil)
+	assert.Equal(t, "fallback", result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
+}
+
+func TestFlagNotFoundFloat(t *testing.T) {
+	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.FloatEvaluation(ctx, "missing-flag", 1.5, nil)
+	assert.Equal(t, 1.5, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
+}
+
+func TestFlagNotFoundInt(t *testing.T) {
+	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.IntEvaluation(ctx, "missing-flag", 7, nil)
+	assert.Equal(t, int64(7), result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
+}
+
+func TestFlagNotFoundObject(t *testing.T) {
+	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	defaultObj := map[string]any{"default": true}
+	result := p.ObjectEvaluation(ctx, "missing-flag", defaultObj, nil)
+	assert.Equal(t, defaultObj, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
+}
+
+func TestProviderNotReadyBoolean(t *testing.T) {
+	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.BooleanEvaluation(ctx, "any-flag", true, nil)
+	assert.Equal(t, true, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
+}
+
+func TestProviderNotReadyFloat(t *testing.T) {
+	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.FloatEvaluation(ctx, "any-flag", 2.5, nil)
+	assert.Equal(t, 2.5, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
+}
+
+func TestProviderNotReadyInt(t *testing.T) {
+	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.IntEvaluation(ctx, "any-flag", 10, nil)
+	assert.Equal(t, int64(10), result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
+}
+
+func TestProviderNotReadyObject(t *testing.T) {
+	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	defaultObj := map[string]any{"fallback": true}
+	result := p.ObjectEvaluation(ctx, "any-flag", defaultObj, nil)
+	assert.Equal(t, defaultObj, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
+}
+
+func TestNullVariantKeyReturnsFlagNotFound(t *testing.T) {
+	// When VariantKey is nil, the provider should treat it as flag not found.
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"nil-variant-flag": {VariantKey: nil, VariantValue: "some-value"},
+		},
+	}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	boolResult := p.BooleanEvaluation(ctx, "nil-variant-flag", false, nil)
+	assert.Equal(t, false, boolResult.Value)
+	assert.Equal(t, of.ErrorReason, boolResult.Reason)
+	assert.Contains(t, boolResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
+
+	strResult := p.StringEvaluation(ctx, "nil-variant-flag", "default", nil)
+	assert.Equal(t, "default", strResult.Value)
+	assert.Equal(t, of.ErrorReason, strResult.Reason)
+	assert.Contains(t, strResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
+
+	floatResult := p.FloatEvaluation(ctx, "nil-variant-flag", 1.0, nil)
+	assert.Equal(t, 1.0, floatResult.Value)
+	assert.Equal(t, of.ErrorReason, floatResult.Reason)
+	assert.Contains(t, floatResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
+
+	intResult := p.IntEvaluation(ctx, "nil-variant-flag", 5, nil)
+	assert.Equal(t, int64(5), intResult.Value)
+	assert.Equal(t, of.ErrorReason, intResult.Reason)
+	assert.Contains(t, intResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
+
+	objResult := p.ObjectEvaluation(ctx, "nil-variant-flag", nil, nil)
+	assert.Nil(t, objResult.Value)
+	assert.Equal(t, of.ErrorReason, objResult.Reason)
+	assert.Contains(t, objResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
+}
+
+func TestEmptyVariantKeyIsValid(t *testing.T) {
+	// An empty string variant key is still a valid (non-nil) key.
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"empty-key-flag": {VariantKey: strPtr(""), VariantValue: "value"},
+		},
+	}
+	p := NewProvider(mock)
+	ctx := context.Background()
+
+	result := p.StringEvaluation(ctx, "empty-key-flag", "default", nil)
+	assert.Equal(t, "value", result.Value)
+	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, "", result.Variant)
 }
 
 func TestFlagNotFoundAllTypes(t *testing.T) {
