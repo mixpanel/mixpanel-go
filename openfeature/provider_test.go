@@ -265,6 +265,33 @@ func TestContextPassedThrough(t *testing.T) {
 	assert.Equal(t, "premium", capturedContext["plan"])
 }
 
+func TestContextUnwrapsValues(t *testing.T) {
+	var capturedContext flags.FlagContext
+	captureMock := &contextCaptureMock{
+		ready:           true,
+		capturedContext: &capturedContext,
+		variant:         flags.SelectedVariant{VariantKey: strPtr("v"), VariantValue: true},
+	}
+	p := NewProvider(captureMock)
+	ctx := context.Background()
+
+	evalCtx := of.FlattenedContext{
+		"distinct_id":     "user123",
+		"whole_float":     float64(42),
+		"fractional":      3.14,
+		"nested_map":      map[string]any{"inner_float": float64(10)},
+		"nested_slice":    []any{float64(1), float64(2), "three"},
+	}
+
+	p.BooleanEvaluation(ctx, "flag", false, evalCtx)
+
+	assert.Equal(t, "user123", capturedContext["distinct_id"])
+	assert.Equal(t, 42, capturedContext["whole_float"])
+	assert.Equal(t, 3.14, capturedContext["fractional"])
+	assert.Equal(t, map[string]any{"inner_float": 10}, capturedContext["nested_map"])
+	assert.Equal(t, []any{1, 2, "three"}, capturedContext["nested_slice"])
+}
+
 func TestDefaultValueReturnedOnError(t *testing.T) {
 	mock := &mockFlagsProvider{
 		ready:    false,
@@ -325,10 +352,27 @@ func TestRemoteProviderSkipsReadinessCheck(t *testing.T) {
 	assert.Equal(t, of.StaticReason, result.Reason)
 }
 
-func TestShutdownIsNoOp(t *testing.T) {
-	p := NewProvider(&mockFlagsProvider{ready: true})
-	// Should not panic
+func TestShutdownCallsStopPolling(t *testing.T) {
+	mock := &mockShutdownProvider{}
+	p := NewProvider(mock)
 	p.Shutdown()
+	assert.True(t, mock.stopped)
+}
+
+func TestShutdownNoOpForRemote(t *testing.T) {
+	p := NewProvider(&mockRemoteFlagsProvider{})
+	// Should not panic when provider has no StopPollingForDefinitions
+	p.Shutdown()
+}
+
+// mockShutdownProvider implements FlagsProvider + StopPollingForDefinitions.
+type mockShutdownProvider struct {
+	mockFlagsProvider
+	stopped bool
+}
+
+func (m *mockShutdownProvider) StopPollingForDefinitions() {
+	m.stopped = true
 }
 
 // contextCaptureMock captures the FlagContext passed to GetVariant.

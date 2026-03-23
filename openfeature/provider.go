@@ -40,6 +40,12 @@ func (p *Provider) Hooks() []of.Hook {
 	return nil
 }
 
+func (p *Provider) Shutdown() {
+	if shutdowner, ok := p.flagsProvider.(interface{ StopPollingForDefinitions() }); ok {
+		shutdowner.StopPollingForDefinitions()
+	}
+}
+
 func (p *Provider) BooleanEvaluation(ctx context.Context, flag string, defaultValue bool, evalCtx of.FlattenedContext) of.BoolResolutionDetail {
 	value, variant, err := p.resolve(ctx, flag, defaultValue, evalCtx)
 	if err != nil {
@@ -187,9 +193,33 @@ func (p *Provider) resolve(ctx context.Context, flagKey string, defaultValue any
 func toFlagContext(evalCtx of.FlattenedContext) flags.FlagContext {
 	fc := make(flags.FlagContext, len(evalCtx))
 	for k, v := range evalCtx {
-		fc[k] = v
+		fc[k] = unwrapValue(v)
 	}
 	return fc
+}
+
+func unwrapValue(v any) any {
+	switch val := v.(type) {
+	case float64:
+		if val == float64(int(val)) {
+			return int(val)
+		}
+		return val
+	case []any:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = unwrapValue(item)
+		}
+		return result
+	case map[string]any:
+		result := make(map[string]any, len(val))
+		for k, item := range val {
+			result[k] = unwrapValue(item)
+		}
+		return result
+	default:
+		return val
+	}
 }
 
 func successDetail(variant string) of.ProviderResolutionDetail {
