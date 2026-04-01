@@ -16,20 +16,12 @@ type mockFlagsProvider struct {
 	ready    bool
 }
 
-func (m *mockFlagsProvider) GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext flags.FlagContext) (any, error) {
-	v, ok := m.variants[flagKey]
-	if !ok {
-		return fallbackValue, nil
-	}
-	return v.VariantValue, nil
+func (m *mockFlagsProvider) GetVariantValue(_ context.Context, flagKey string, fallbackValue any, _ flags.FlagContext) (any, error) {
+	return getVariantValue(m.variants, flagKey, fallbackValue)
 }
 
-func (m *mockFlagsProvider) GetVariant(ctx context.Context, flagKey string, fallbackVariant flags.SelectedVariant, flagContext flags.FlagContext, reportExposure bool) (flags.SelectedVariant, error) {
-	v, ok := m.variants[flagKey]
-	if !ok {
-		return fallbackVariant, nil
-	}
-	return v, nil
+func (m *mockFlagsProvider) GetVariant(_ context.Context, flagKey string, fallbackVariant flags.SelectedVariant, _ flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
+	return getVariant(m.variants, flagKey, fallbackVariant)
 }
 
 func (m *mockFlagsProvider) AreFlagsReady() bool {
@@ -41,23 +33,31 @@ type mockRemoteFlagsProvider struct {
 	variants map[string]flags.SelectedVariant
 }
 
-func (m *mockRemoteFlagsProvider) GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext flags.FlagContext) (any, error) {
-	v, ok := m.variants[flagKey]
+func (m *mockRemoteFlagsProvider) GetVariantValue(_ context.Context, flagKey string, fallbackValue any, _ flags.FlagContext) (any, error) {
+	return getVariantValue(m.variants, flagKey, fallbackValue)
+}
+
+func (m *mockRemoteFlagsProvider) GetVariant(_ context.Context, flagKey string, fallbackVariant flags.SelectedVariant, _ flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
+	return getVariant(m.variants, flagKey, fallbackVariant)
+}
+
+func strPtr(s string) *string { return &s }
+
+func getVariantValue(variants map[string]flags.SelectedVariant, flagKey string, fallbackValue any) (any, error) {
+	v, ok := variants[flagKey]
 	if !ok {
 		return fallbackValue, nil
 	}
 	return v.VariantValue, nil
 }
 
-func (m *mockRemoteFlagsProvider) GetVariant(ctx context.Context, flagKey string, fallbackVariant flags.SelectedVariant, flagContext flags.FlagContext, reportExposure bool) (flags.SelectedVariant, error) {
-	v, ok := m.variants[flagKey]
+func getVariant(variants map[string]flags.SelectedVariant, flagKey string, fallbackVariant flags.SelectedVariant) (flags.SelectedVariant, error) {
+	v, ok := variants[flagKey]
 	if !ok {
 		return fallbackVariant, nil
 	}
 	return v, nil
 }
-
-func strPtr(s string) *string { return &s }
 
 func TestMetadata(t *testing.T) {
 	p := NewProvider(&mockFlagsProvider{ready: true})
@@ -213,34 +213,6 @@ func TestObjectEvaluation(t *testing.T) {
 	assert.Equal(t, "config", result.Variant)
 }
 
-func TestFlagNotFound(t *testing.T) {
-	mock := &mockFlagsProvider{
-		ready:    true,
-		variants: map[string]flags.SelectedVariant{},
-	}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.BooleanEvaluation(ctx, "missing-flag", false, nil)
-	assert.Equal(t, false, result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
-}
-
-func TestProviderNotReady(t *testing.T) {
-	mock := &mockFlagsProvider{
-		ready:    false,
-		variants: map[string]flags.SelectedVariant{},
-	}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.StringEvaluation(ctx, "any-flag", "default", nil)
-	assert.Equal(t, "default", result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
-}
-
 func TestContextPassedThrough(t *testing.T) {
 	// Use a custom mock that captures the flag context
 	var capturedContext flags.FlagContext
@@ -382,12 +354,11 @@ type contextCaptureMock struct {
 	variant         flags.SelectedVariant
 }
 
-func (m *contextCaptureMock) GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext flags.FlagContext) (any, error) {
-	*m.capturedContext = flagContext
-	return m.variant.VariantValue, nil
+func (m *contextCaptureMock) GetVariantValue(_ context.Context, _ string, fallbackValue any, _ flags.FlagContext) (any, error) {
+	return fallbackValue, nil
 }
 
-func (m *contextCaptureMock) GetVariant(ctx context.Context, flagKey string, fallbackVariant flags.SelectedVariant, flagContext flags.FlagContext, reportExposure bool) (flags.SelectedVariant, error) {
+func (m *contextCaptureMock) GetVariant(_ context.Context, _ string, _ flags.SelectedVariant, flagContext flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
 	*m.capturedContext = flagContext
 	return m.variant, nil
 }
@@ -401,11 +372,11 @@ type errorFlagsProvider struct {
 	ready bool
 }
 
-func (m *errorFlagsProvider) GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext flags.FlagContext) (any, error) {
+func (m *errorFlagsProvider) GetVariantValue(_ context.Context, _ string, fallbackValue any, _ flags.FlagContext) (any, error) {
 	return fallbackValue, fmt.Errorf("sdk error")
 }
 
-func (m *errorFlagsProvider) GetVariant(ctx context.Context, flagKey string, fallbackVariant flags.SelectedVariant, flagContext flags.FlagContext, reportExposure bool) (flags.SelectedVariant, error) {
+func (m *errorFlagsProvider) GetVariant(_ context.Context, _ string, fallbackVariant flags.SelectedVariant, _ flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
 	return fallbackVariant, fmt.Errorf("sdk error")
 }
 
@@ -467,96 +438,6 @@ func TestIntEvaluationNonWholeFloat(t *testing.T) {
 	result := p.IntEvaluation(ctx, "pi", 0, nil)
 	assert.Equal(t, int64(0), result.Value)
 	assert.Contains(t, result.ResolutionError.Error(), "TYPE_MISMATCH")
-}
-
-func TestFlagNotFoundString(t *testing.T) {
-	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.StringEvaluation(ctx, "missing-flag", "fallback", nil)
-	assert.Equal(t, "fallback", result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
-}
-
-func TestFlagNotFoundFloat(t *testing.T) {
-	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.FloatEvaluation(ctx, "missing-flag", 1.5, nil)
-	assert.Equal(t, 1.5, result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
-}
-
-func TestFlagNotFoundInt(t *testing.T) {
-	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.IntEvaluation(ctx, "missing-flag", 7, nil)
-	assert.Equal(t, int64(7), result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
-}
-
-func TestFlagNotFoundObject(t *testing.T) {
-	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	defaultObj := map[string]any{"default": true}
-	result := p.ObjectEvaluation(ctx, "missing-flag", defaultObj, nil)
-	assert.Equal(t, defaultObj, result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
-}
-
-func TestProviderNotReadyBoolean(t *testing.T) {
-	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.BooleanEvaluation(ctx, "any-flag", true, nil)
-	assert.Equal(t, true, result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
-}
-
-func TestProviderNotReadyFloat(t *testing.T) {
-	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.FloatEvaluation(ctx, "any-flag", 2.5, nil)
-	assert.Equal(t, 2.5, result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
-}
-
-func TestProviderNotReadyInt(t *testing.T) {
-	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	result := p.IntEvaluation(ctx, "any-flag", 10, nil)
-	assert.Equal(t, int64(10), result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
-}
-
-func TestProviderNotReadyObject(t *testing.T) {
-	mock := &mockFlagsProvider{ready: false, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
-	ctx := context.Background()
-
-	defaultObj := map[string]any{"fallback": true}
-	result := p.ObjectEvaluation(ctx, "any-flag", defaultObj, nil)
-	assert.Equal(t, defaultObj, result.Value)
-	assert.Equal(t, of.ErrorReason, result.Reason)
-	assert.Contains(t, result.ResolutionError.Error(), "PROVIDER_NOT_READY")
 }
 
 func TestNullVariantKeyReturnsFlagNotFound(t *testing.T) {

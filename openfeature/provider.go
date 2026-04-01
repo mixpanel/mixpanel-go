@@ -138,7 +138,7 @@ func (p *Provider) IntEvaluation(ctx context.Context, flag string, defaultValue 
 	}
 }
 
-func (p *Provider) ObjectEvaluation(ctx context.Context, flag string, defaultValue interface{}, evalCtx of.FlattenedContext) of.InterfaceResolutionDetail {
+func (p *Provider) ObjectEvaluation(ctx context.Context, flag string, defaultValue any, evalCtx of.FlattenedContext) of.InterfaceResolutionDetail {
 	value, variant, err := p.resolve(ctx, flag, defaultValue, evalCtx)
 	if err != nil {
 		return of.InterfaceResolutionDetail{
@@ -201,7 +201,7 @@ func toFlagContext(evalCtx of.FlattenedContext) flags.FlagContext {
 func unwrapValue(v any) any {
 	switch val := v.(type) {
 	case float64:
-		if val == float64(int(val)) {
+		if val == float64(int64(val)) {
 			return int(val)
 		}
 		return val
