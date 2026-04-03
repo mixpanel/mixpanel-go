@@ -28,3 +28,15 @@ jobs:
       - uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+  OpenFeature-Unit-Test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.25.x', '1.24.x', '1.23.x', '1.22.x' ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go version
+      - run: cd openfeature && go test ./... -v
