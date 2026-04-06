@@ -8,6 +8,8 @@ import (
 	of "github.com/open-feature/go-sdk/openfeature"
 )
 
+const version = "v2.0.0"
+
 // FlagsProvider is the interface satisfied by both LocalFeatureFlagsProvider and RemoteFeatureFlagsProvider.
 type FlagsProvider interface {
 	GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext flags.FlagContext) (any, error)
@@ -30,6 +32,23 @@ var _ of.FeatureProvider = (*Provider)(nil)
 // NewProvider creates a new Mixpanel OpenFeature provider wrapping the given flags provider.
 func NewProvider(flagsProvider FlagsProvider) *Provider {
 	return &Provider{flagsProvider: flagsProvider}
+}
+
+// NewProviderWithLocalConfig creates a new Mixpanel OpenFeature provider using local flag evaluation.
+// It creates a LocalFeatureFlagsProvider, starts polling for definitions, and returns the provider.
+func NewProviderWithLocalConfig(token string, config flags.LocalFlagsConfig) (*Provider, error) {
+	localProvider := flags.NewLocalFeatureFlagsProvider(token, version, config, nil)
+	if err := localProvider.StartPollingForDefinitions(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to start polling for definitions: %w", err)
+	}
+	return NewProvider(localProvider), nil
+}
+
+// NewProviderWithRemoteConfig creates a new Mixpanel OpenFeature provider using remote flag evaluation.
+// It creates a RemoteFeatureFlagsProvider and returns the provider.
+func NewProviderWithRemoteConfig(token string, config flags.RemoteFlagsConfig) (*Provider, error) {
+	remoteProvider := flags.NewRemoteFeatureFlagsProvider(token, version, config, nil)
+	return NewProvider(remoteProvider), nil
 }
 
 func (p *Provider) Metadata() of.Metadata {
