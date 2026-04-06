@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	mixpanel "github.com/mixpanel/mixpanel-go/v2"
 	"github.com/mixpanel/mixpanel-go/v2/flags"
 	of "github.com/open-feature/go-sdk/openfeature"
 )
@@ -24,6 +25,10 @@ type Provider struct {
 	of.NoopStateHandler
 	of.NoopEventHandler
 	flagsProvider FlagsProvider
+
+	// Mixpanel is the underlying ApiClient instance, available when the provider
+	// was created via NewProviderWithLocalConfig or NewProviderWithRemoteConfig.
+	Mixpanel *mixpanel.ApiClient
 }
 
 // Compile-time check that Provider satisfies the FeatureProvider interface.
@@ -35,20 +40,26 @@ func NewProvider(flagsProvider FlagsProvider) *Provider {
 }
 
 // NewProviderWithLocalConfig creates a new Mixpanel OpenFeature provider using local flag evaluation.
-// It creates a LocalFeatureFlagsProvider, starts polling for definitions, and returns the provider.
+// It creates an ApiClient with a LocalFeatureFlagsProvider, starts polling for definitions, and returns the provider.
+// The ApiClient is accessible via the Mixpanel field.
 func NewProviderWithLocalConfig(token string, config flags.LocalFlagsConfig) (*Provider, error) {
-	localProvider := flags.NewLocalFeatureFlagsProvider(token, version, config, nil)
-	if err := localProvider.StartPollingForDefinitions(context.Background()); err != nil {
+	mp := mixpanel.NewApiClient(token, mixpanel.WithLocalFlags(config))
+	if err := mp.LocalFlags.StartPollingForDefinitions(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to start polling for definitions: %w", err)
 	}
-	return NewProvider(localProvider), nil
+	provider := NewProvider(mp.LocalFlags)
+	provider.Mixpanel = mp
+	return provider, nil
 }
 
 // NewProviderWithRemoteConfig creates a new Mixpanel OpenFeature provider using remote flag evaluation.
-// It creates a RemoteFeatureFlagsProvider and returns the provider.
+// It creates an ApiClient with a RemoteFeatureFlagsProvider and returns the provider.
+// The ApiClient is accessible via the Mixpanel field.
 func NewProviderWithRemoteConfig(token string, config flags.RemoteFlagsConfig) (*Provider, error) {
-	remoteProvider := flags.NewRemoteFeatureFlagsProvider(token, version, config, nil)
-	return NewProvider(remoteProvider), nil
+	mp := mixpanel.NewApiClient(token, mixpanel.WithRemoteFlags(config, nil))
+	provider := NewProvider(mp.RemoteFlags)
+	provider.Mixpanel = mp
+	return provider, nil
 }
 
 func (p *Provider) Metadata() of.Metadata {
