@@ -82,7 +82,7 @@ func TestBooleanEvaluation(t *testing.T) {
 
 	result := p.BooleanEvaluation(ctx, "bool-flag", false, evalCtx)
 	assert.Equal(t, true, result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 	assert.Equal(t, "on", result.Variant)
 }
 
@@ -114,7 +114,7 @@ func TestStringEvaluation(t *testing.T) {
 
 	result := p.StringEvaluation(ctx, "str-flag", "default", nil)
 	assert.Equal(t, "hello", result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 	assert.Equal(t, "variant-a", result.Variant)
 }
 
@@ -146,7 +146,7 @@ func TestFloatEvaluation(t *testing.T) {
 
 	result := p.FloatEvaluation(ctx, "float-flag", 0.0, nil)
 	assert.Equal(t, 0.5, result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 	assert.Equal(t, "half", result.Variant)
 }
 
@@ -177,7 +177,7 @@ func TestIntEvaluation(t *testing.T) {
 
 	result := p.IntEvaluation(ctx, "int-flag", 0, nil)
 	assert.Equal(t, int64(42), result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 	assert.Equal(t, "big", result.Variant)
 }
 
@@ -209,7 +209,7 @@ func TestObjectEvaluation(t *testing.T) {
 
 	result := p.ObjectEvaluation(ctx, "obj-flag", nil, nil)
 	assert.Equal(t, obj, result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 	assert.Equal(t, "config", result.Variant)
 }
 
@@ -321,7 +321,7 @@ func TestRemoteProviderSkipsReadinessCheck(t *testing.T) {
 
 	result := p.StringEvaluation(ctx, "remote-flag", "default", nil)
 	assert.Equal(t, "remote-value", result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 }
 
 func TestShutdownCallsStopPolling(t *testing.T) {
@@ -407,7 +407,7 @@ func TestFloatEvaluationFromInt(t *testing.T) {
 
 	result := p.FloatEvaluation(ctx, "int-as-float", 0.0, nil)
 	assert.Equal(t, 42.0, result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 }
 
 func TestIntEvaluationFromNativeInt64(t *testing.T) {
@@ -422,7 +422,7 @@ func TestIntEvaluationFromNativeInt64(t *testing.T) {
 
 	result := p.IntEvaluation(ctx, "int64-flag", 0, nil)
 	assert.Equal(t, int64(100), result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 }
 
 func TestIntEvaluationNonWholeFloat(t *testing.T) {
@@ -453,27 +453,27 @@ func TestNullVariantKeyReturnsFlagNotFound(t *testing.T) {
 
 	boolResult := p.BooleanEvaluation(ctx, "nil-variant-flag", false, nil)
 	assert.Equal(t, false, boolResult.Value)
-	assert.Equal(t, of.ErrorReason, boolResult.Reason)
+	assert.Equal(t, of.DefaultReason, boolResult.Reason)
 	assert.Contains(t, boolResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
 
 	strResult := p.StringEvaluation(ctx, "nil-variant-flag", "default", nil)
 	assert.Equal(t, "default", strResult.Value)
-	assert.Equal(t, of.ErrorReason, strResult.Reason)
+	assert.Equal(t, of.DefaultReason, strResult.Reason)
 	assert.Contains(t, strResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
 
 	floatResult := p.FloatEvaluation(ctx, "nil-variant-flag", 1.0, nil)
 	assert.Equal(t, 1.0, floatResult.Value)
-	assert.Equal(t, of.ErrorReason, floatResult.Reason)
+	assert.Equal(t, of.DefaultReason, floatResult.Reason)
 	assert.Contains(t, floatResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
 
 	intResult := p.IntEvaluation(ctx, "nil-variant-flag", 5, nil)
 	assert.Equal(t, int64(5), intResult.Value)
-	assert.Equal(t, of.ErrorReason, intResult.Reason)
+	assert.Equal(t, of.DefaultReason, intResult.Reason)
 	assert.Contains(t, intResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
 
 	objResult := p.ObjectEvaluation(ctx, "nil-variant-flag", nil, nil)
 	assert.Nil(t, objResult.Value)
-	assert.Equal(t, of.ErrorReason, objResult.Reason)
+	assert.Equal(t, of.DefaultReason, objResult.Reason)
 	assert.Contains(t, objResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
 }
 
@@ -490,7 +490,7 @@ func TestEmptyVariantKeyIsValid(t *testing.T) {
 
 	result := p.StringEvaluation(ctx, "empty-key-flag", "default", nil)
 	assert.Equal(t, "value", result.Value)
-	assert.Equal(t, of.StaticReason, result.Reason)
+	assert.Equal(t, of.TargetingMatchReason, result.Reason)
 	assert.Equal(t, "", result.Variant)
 }
 

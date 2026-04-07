@@ -254,7 +254,7 @@ func unwrapValue(v any) any {
 
 func successDetail(variant string) of.ProviderResolutionDetail {
 	return of.ProviderResolutionDetail{
-		Reason:  of.StaticReason,
+		Reason:  of.TargetingMatchReason,
 		Variant: variant,
 	}
 }
@@ -269,18 +269,22 @@ func errorDetail(err error) of.ProviderResolutionDetail {
 	}
 
 	var resErr of.ResolutionError
+	var reason of.Reason
 	switch re.kind {
 	case errProviderNotReady:
 		resErr = of.NewProviderNotReadyResolutionError(re.message)
+		reason = of.ErrorReason
 	case errFlagNotFound:
 		resErr = of.NewFlagNotFoundResolutionError(re.message)
+		reason = of.DefaultReason
 	default:
 		resErr = of.NewGeneralResolutionError(re.message)
+		reason = of.ErrorReason
 	}
 
 	return of.ProviderResolutionDetail{
 		ResolutionError: resErr,
-		Reason:          of.ErrorReason,
+		Reason:          reason,
 	}
 }
 
