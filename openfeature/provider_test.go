@@ -16,10 +16,6 @@ type mockFlagsProvider struct {
 	ready    bool
 }
 
-func (m *mockFlagsProvider) GetVariantValue(_ context.Context, flagKey string, fallbackValue any, _ flags.FlagContext) (any, error) {
-	return getVariantValue(m.variants, flagKey, fallbackValue)
-}
-
 func (m *mockFlagsProvider) GetVariant(_ context.Context, flagKey string, fallbackVariant flags.SelectedVariant, _ flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
 	return getVariant(m.variants, flagKey, fallbackVariant)
 }
@@ -33,23 +29,11 @@ type mockRemoteFlagsProvider struct {
 	variants map[string]flags.SelectedVariant
 }
 
-func (m *mockRemoteFlagsProvider) GetVariantValue(_ context.Context, flagKey string, fallbackValue any, _ flags.FlagContext) (any, error) {
-	return getVariantValue(m.variants, flagKey, fallbackValue)
-}
-
 func (m *mockRemoteFlagsProvider) GetVariant(_ context.Context, flagKey string, fallbackVariant flags.SelectedVariant, _ flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
 	return getVariant(m.variants, flagKey, fallbackVariant)
 }
 
 func strPtr(s string) *string { return &s }
-
-func getVariantValue(variants map[string]flags.SelectedVariant, flagKey string, fallbackValue any) (any, error) {
-	v, ok := variants[flagKey]
-	if !ok {
-		return fallbackValue, nil
-	}
-	return v.VariantValue, nil
-}
 
 func getVariant(variants map[string]flags.SelectedVariant, flagKey string, fallbackVariant flags.SelectedVariant) (flags.SelectedVariant, error) {
 	v, ok := variants[flagKey]
@@ -59,13 +43,28 @@ func getVariant(variants map[string]flags.SelectedVariant, flagKey string, fallb
 	return v, nil
 }
 
+// mustNewProvider calls NewProvider and fails the test if it returns an error.
+func mustNewProvider(t *testing.T, fp FlagsProvider) *Provider {
+	t.Helper()
+	p, err := NewProvider(fp)
+	assert.NoError(t, err)
+	return p
+}
+
+func TestNewProviderNilFlagsProvider(t *testing.T) {
+	p, err := NewProvider(nil)
+	assert.Nil(t, p)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "flagsProvider must not be nil")
+}
+
 func TestMetadata(t *testing.T) {
-	p := NewProvider(&mockFlagsProvider{ready: true})
+	p := mustNewProvider(t, &mockFlagsProvider{ready: true})
 	assert.Equal(t, "mixpanel-provider", p.Metadata().Name)
 }
 
 func TestHooksReturnsNil(t *testing.T) {
-	p := NewProvider(&mockFlagsProvider{ready: true})
+	p := mustNewProvider(t, &mockFlagsProvider{ready: true})
 	assert.Nil(t, p.Hooks())
 }
 
@@ -76,7 +75,7 @@ func TestBooleanEvaluation(t *testing.T) {
 			"bool-flag": {VariantKey: strPtr("on"), VariantValue: true},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 	evalCtx := of.FlattenedContext{"distinct_id": "user1"}
 
@@ -93,7 +92,7 @@ func TestBooleanEvaluationTypeMismatch(t *testing.T) {
 			"string-flag": {VariantKey: strPtr("variant-a"), VariantValue: "not-a-bool"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.BooleanEvaluation(ctx, "string-flag", false, nil)
@@ -109,7 +108,7 @@ func TestStringEvaluation(t *testing.T) {
 			"str-flag": {VariantKey: strPtr("variant-a"), VariantValue: "hello"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.StringEvaluation(ctx, "str-flag", "default", nil)
@@ -125,7 +124,7 @@ func TestStringEvaluationTypeMismatch(t *testing.T) {
 			"bool-flag": {VariantKey: strPtr("on"), VariantValue: true},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.StringEvaluation(ctx, "bool-flag", "default", nil)
@@ -141,7 +140,7 @@ func TestFloatEvaluation(t *testing.T) {
 			"float-flag": {VariantKey: strPtr("half"), VariantValue: 0.5},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.FloatEvaluation(ctx, "float-flag", 0.0, nil)
@@ -157,7 +156,7 @@ func TestFloatEvaluationTypeMismatch(t *testing.T) {
 			"str-flag": {VariantKey: strPtr("v"), VariantValue: "not-a-float"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.FloatEvaluation(ctx, "str-flag", 1.0, nil)
@@ -172,7 +171,7 @@ func TestIntEvaluation(t *testing.T) {
 			"int-flag": {VariantKey: strPtr("big"), VariantValue: float64(42)},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.IntEvaluation(ctx, "int-flag", 0, nil)
@@ -188,7 +187,7 @@ func TestIntEvaluationTypeMismatch(t *testing.T) {
 			"str-flag": {VariantKey: strPtr("v"), VariantValue: "not-an-int"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.IntEvaluation(ctx, "str-flag", 0, nil)
@@ -204,7 +203,7 @@ func TestObjectEvaluation(t *testing.T) {
 			"obj-flag": {VariantKey: strPtr("config"), VariantValue: obj},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.ObjectEvaluation(ctx, "obj-flag", nil, nil)
@@ -221,7 +220,7 @@ func TestContextPassedThrough(t *testing.T) {
 		capturedContext: &capturedContext,
 		variant:         flags.SelectedVariant{VariantKey: strPtr("v"), VariantValue: true},
 	}
-	p := NewProvider(captureMock)
+	p := mustNewProvider(t, captureMock)
 	ctx := context.Background()
 
 	evalCtx := of.FlattenedContext{
@@ -244,7 +243,7 @@ func TestContextUnwrapsValues(t *testing.T) {
 		capturedContext: &capturedContext,
 		variant:         flags.SelectedVariant{VariantKey: strPtr("v"), VariantValue: true},
 	}
-	p := NewProvider(captureMock)
+	p := mustNewProvider(t, captureMock)
 	ctx := context.Background()
 
 	evalCtx := of.FlattenedContext{
@@ -258,10 +257,10 @@ func TestContextUnwrapsValues(t *testing.T) {
 	p.BooleanEvaluation(ctx, "flag", false, evalCtx)
 
 	assert.Equal(t, "user123", capturedContext["distinct_id"])
-	assert.Equal(t, 42, capturedContext["whole_float"])
+	assert.Equal(t, int64(42), capturedContext["whole_float"])
 	assert.Equal(t, 3.14, capturedContext["fractional"])
-	assert.Equal(t, map[string]any{"inner_float": 10}, capturedContext["nested_map"])
-	assert.Equal(t, []any{1, 2, "three"}, capturedContext["nested_slice"])
+	assert.Equal(t, map[string]any{"inner_float": int64(10)}, capturedContext["nested_map"])
+	assert.Equal(t, []any{int64(1), int64(2), "three"}, capturedContext["nested_slice"])
 }
 
 func TestDefaultValueReturnedOnError(t *testing.T) {
@@ -269,7 +268,7 @@ func TestDefaultValueReturnedOnError(t *testing.T) {
 		ready:    false,
 		variants: map[string]flags.SelectedVariant{},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	boolResult := p.BooleanEvaluation(ctx, "f", true, nil)
@@ -295,7 +294,7 @@ func TestTargetingKeyNotSpecial(t *testing.T) {
 		capturedContext: &capturedContext,
 		variant:         flags.SelectedVariant{VariantKey: strPtr("v"), VariantValue: "val"},
 	}
-	p := NewProvider(captureMock)
+	p := mustNewProvider(t, captureMock)
 	ctx := context.Background()
 
 	evalCtx := of.FlattenedContext{
@@ -316,7 +315,7 @@ func TestRemoteProviderSkipsReadinessCheck(t *testing.T) {
 			"remote-flag": {VariantKey: strPtr("v1"), VariantValue: "remote-value"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.StringEvaluation(ctx, "remote-flag", "default", nil)
@@ -326,13 +325,13 @@ func TestRemoteProviderSkipsReadinessCheck(t *testing.T) {
 
 func TestShutdownCallsStopPolling(t *testing.T) {
 	mock := &mockShutdownProvider{}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	p.Shutdown()
 	assert.True(t, mock.stopped)
 }
 
 func TestShutdownNoOpForRemote(t *testing.T) {
-	p := NewProvider(&mockRemoteFlagsProvider{})
+	p := mustNewProvider(t, &mockRemoteFlagsProvider{})
 	// Should not panic when provider has no StopPollingForDefinitions
 	p.Shutdown()
 }
@@ -354,10 +353,6 @@ type contextCaptureMock struct {
 	variant         flags.SelectedVariant
 }
 
-func (m *contextCaptureMock) GetVariantValue(_ context.Context, _ string, fallbackValue any, _ flags.FlagContext) (any, error) {
-	return fallbackValue, nil
-}
-
 func (m *contextCaptureMock) GetVariant(_ context.Context, _ string, _ flags.SelectedVariant, flagContext flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
 	*m.capturedContext = flagContext
 	return m.variant, nil
@@ -372,10 +367,6 @@ type errorFlagsProvider struct {
 	ready bool
 }
 
-func (m *errorFlagsProvider) GetVariantValue(_ context.Context, _ string, fallbackValue any, _ flags.FlagContext) (any, error) {
-	return fallbackValue, fmt.Errorf("sdk error")
-}
-
 func (m *errorFlagsProvider) GetVariant(_ context.Context, _ string, fallbackVariant flags.SelectedVariant, _ flags.FlagContext, _ bool) (flags.SelectedVariant, error) {
 	return fallbackVariant, fmt.Errorf("sdk error")
 }
@@ -386,7 +377,7 @@ func (m *errorFlagsProvider) AreFlagsReady() bool {
 
 func TestSDKErrorReturnsDefault(t *testing.T) {
 	mock := &errorFlagsProvider{ready: true}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.BooleanEvaluation(ctx, "flag", true, nil)
@@ -402,7 +393,7 @@ func TestFloatEvaluationFromInt(t *testing.T) {
 			"int-as-float": {VariantKey: strPtr("v1"), VariantValue: int(42)},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.FloatEvaluation(ctx, "int-as-float", 0.0, nil)
@@ -417,7 +408,7 @@ func TestIntEvaluationFromNativeInt64(t *testing.T) {
 			"int64-flag": {VariantKey: strPtr("limit"), VariantValue: int64(100)},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.IntEvaluation(ctx, "int64-flag", 0, nil)
@@ -432,7 +423,7 @@ func TestIntEvaluationNonWholeFloat(t *testing.T) {
 			"pi": {VariantKey: strPtr("v"), VariantValue: 3.14},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.IntEvaluation(ctx, "pi", 0, nil)
@@ -448,7 +439,7 @@ func TestNullVariantKeyReturnsFlagNotFound(t *testing.T) {
 			"nil-variant-flag": {VariantKey: nil, VariantValue: "some-value"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	boolResult := p.BooleanEvaluation(ctx, "nil-variant-flag", false, nil)
@@ -485,7 +476,7 @@ func TestEmptyVariantKeyIsValid(t *testing.T) {
 			"empty-key-flag": {VariantKey: strPtr(""), VariantValue: "value"},
 		},
 	}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	result := p.StringEvaluation(ctx, "empty-key-flag", "default", nil)
@@ -496,7 +487,7 @@ func TestEmptyVariantKeyIsValid(t *testing.T) {
 
 func TestFlagNotFoundAllTypes(t *testing.T) {
 	mock := &mockFlagsProvider{ready: true, variants: map[string]flags.SelectedVariant{}}
-	p := NewProvider(mock)
+	p := mustNewProvider(t, mock)
 	ctx := context.Background()
 
 	boolResult := p.BooleanEvaluation(ctx, "missing", true, nil)

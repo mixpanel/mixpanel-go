@@ -2,6 +2,7 @@ package openfeature
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	mixpanel "github.com/mixpanel/mixpanel-go/v2"
@@ -9,11 +10,8 @@ import (
 	of "github.com/open-feature/go-sdk/openfeature"
 )
 
-const version = "v2.0.0"
-
 // FlagsProvider is the interface satisfied by both LocalFeatureFlagsProvider and RemoteFeatureFlagsProvider.
 type FlagsProvider interface {
-	GetVariantValue(ctx context.Context, flagKey string, fallbackValue any, flagContext flags.FlagContext) (any, error)
 	GetVariant(ctx context.Context, flagKey string, fallbackVariant flags.SelectedVariant, flagContext flags.FlagContext, reportExposure bool) (flags.SelectedVariant, error)
 }
 
@@ -35,8 +33,11 @@ type Provider struct {
 var _ of.FeatureProvider = (*Provider)(nil)
 
 // NewProvider creates a new Mixpanel OpenFeature provider wrapping the given flags provider.
-func NewProvider(flagsProvider FlagsProvider) *Provider {
-	return &Provider{flagsProvider: flagsProvider}
+func NewProvider(flagsProvider FlagsProvider) (*Provider, error) {
+	if flagsProvider == nil {
+		return nil, errors.New("flagsProvider must not be nil")
+	}
+	return &Provider{flagsProvider: flagsProvider}, nil
 }
 
 // NewProviderWithLocalConfig creates a new Mixpanel OpenFeature provider using local flag evaluation.
@@ -47,7 +48,7 @@ func NewProviderWithLocalConfig(token string, config flags.LocalFlagsConfig) (*P
 	if err := mp.LocalFlags.StartPollingForDefinitions(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to start polling for definitions: %w", err)
 	}
-	provider := NewProvider(mp.LocalFlags)
+	provider, _ := NewProvider(mp.LocalFlags)
 	provider.Mixpanel = mp
 	return provider, nil
 }
@@ -57,7 +58,7 @@ func NewProviderWithLocalConfig(token string, config flags.LocalFlagsConfig) (*P
 // The ApiClient is accessible via the Mixpanel field.
 func NewProviderWithRemoteConfig(token string, config flags.RemoteFlagsConfig) (*Provider, error) {
 	mp := mixpanel.NewApiClient(token, mixpanel.WithRemoteFlags(config, nil))
-	provider := NewProvider(mp.RemoteFlags)
+	provider, _ := NewProvider(mp.RemoteFlags)
 	provider.Mixpanel = mp
 	return provider, nil
 }
@@ -232,7 +233,7 @@ func unwrapValue(v any) any {
 	switch val := v.(type) {
 	case float64:
 		if val == float64(int64(val)) {
-			return int(val)
+			return int64(val)
 		}
 		return val
 	case []any:
