@@ -14,7 +14,7 @@ This package provides a bridge between Mixpanel's native feature flags implement
 ## Installation
 
 ```bash
-go get github.com/mixpanel/mixpanel-go/v2/openfeature
+go get github.com/mixpanel/mixpanel-go/openfeature
 ```
 
 You will also need the OpenFeature Go SDK:
@@ -32,7 +32,7 @@ import (
 	"context"
 	"fmt"
 
-	mixpanelopenfeature "github.com/mixpanel/mixpanel-go/v2/openfeature"
+	mixpanelopenfeature "github.com/mixpanel/mixpanel-go/openfeature"
 	"github.com/mixpanel/mixpanel-go/v2/flags"
 	of "github.com/open-feature/go-sdk/openfeature"
 )

@@ -1,6 +1,6 @@
 # Releasing the OpenFeature Provider
 
-The OpenFeature provider (`github.com/mixpanel/mixpanel-go/v2/openfeature`) is published as a separate Go module within this repository. It has its own `go.mod` and is versioned independently from the core SDK.
+The OpenFeature provider (`github.com/mixpanel/mixpanel-go/openfeature`) is published as a separate Go module within this repository. It has its own `go.mod` and is versioned independently from the core SDK.
 
 ## Releasing
 
@@ -14,7 +14,7 @@ The OpenFeature provider (`github.com/mixpanel/mixpanel-go/v2/openfeature`) is p
 
 3. The Go module proxy auto-indexes the new version within minutes
 
-4. Verify at https://pkg.go.dev/github.com/mixpanel/mixpanel-go/v2/openfeature
+4. Verify at https://pkg.go.dev/github.com/mixpanel/mixpanel-go/openfeature
 
 No build step, credentials, or upload is needed — the Go proxy pulls directly from the git tag.
 
@@ -25,7 +25,7 @@ The OpenFeature provider is versioned independently from the core SDK. The core 
 ## How users install it
 
 ```bash
-go get github.com/mixpanel/mixpanel-go/v2/openfeature
+go get github.com/mixpanel/mixpanel-go/openfeature
 ```
 
 Because this directory has its own `go.mod`, Go treats it as a separate module. The core SDK is pulled in as a transitive dependency.

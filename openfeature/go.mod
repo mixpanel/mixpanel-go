@@ -1,4 +1,4 @@
-module github.com/mixpanel/mixpanel-go/v2/openfeature
+module github.com/mixpanel/mixpanel-go/openfeature
 
 go 1.22
 
