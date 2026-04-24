@@ -31,7 +31,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - run: go version
       - run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
-      - uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
+      - uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad  # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
   OpenFeature-Unit-Test:
