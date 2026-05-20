@@ -1,0 +1,18 @@
+{
+  "analytics": {
+    "tag_prefix": "v",
+    "go_mod": "go.mod",
+    "version_files": [],
+    "changelog": "CHANGELOG.md",
+    "readme": "README.md",
+    "package_name": "github.com/mixpanel/mixpanel-go/v2"
+  },
+  "openfeature": {
+    "tag_prefix": "openfeature/v",
+    "go_mod": "openfeature/go.mod",
+    "version_files": [],
+    "changelog": "openfeature/CHANGELOG.md",
+    "readme": "openfeature/README.md",
+    "package_name": "github.com/mixpanel/mixpanel-go/openfeature"
+  }
+}
