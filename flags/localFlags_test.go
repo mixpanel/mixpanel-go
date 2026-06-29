@@ -515,6 +515,77 @@ func TestLocalFeatureFlagsProvider_VariantSplits(t *testing.T) {
 	})
 }
 
+// SDK-79: every fallback path on get_variant must be tagged distinctly via
+// VariantSource so the OpenFeature wrapper can map it correctly.
+func TestLocalFeatureFlagsProvider_GetVariant_VariantSourceTagging(t *testing.T) {
+	makeFlag := func(rolloutPct float64, ctxKey string) ExperimentationFlag {
+		return ExperimentationFlag{
+			Key:     "test-flag",
+			Context: ctxKey,
+			Ruleset: RuleSet{
+				Variants: []Variant{
+					{Key: "control", Value: "control", IsControl: true, Split: 100.0},
+				},
+				Rollout: []Rollout{{RolloutPercentage: rolloutPct}},
+			},
+		}
+	}
+
+	setup := func(t *testing.T, defs []ExperimentationFlag) *LocalFeatureFlagsProvider {
+		t.Helper()
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+			httpmock.NewJsonResponderOrPanic(200, experimentationFlagsResponse{Flags: defs}))
+		require.NoError(t, provider.StartPollingForDefinitions(context.Background())) //nolint:contextcheck
+
+		return provider
+	}
+
+	t.Run("tags matched variants as local with no fallback_reason", func(t *testing.T) {
+		provider := setup(t, []ExperimentationFlag{makeFlag(100.0, "distinct_id")})
+		result, err := provider.GetVariant(context.Background(), "test-flag",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{"distinct_id": "u1"}, false)
+		require.NoError(t, err)
+		require.Equal(t, VariantSourceLocal, result.VariantSource)
+		require.Empty(t, result.FallbackReason)
+		require.NotNil(t, result.VariantKey)
+	})
+
+	t.Run("tags missing flag as fallback / FLAG_NOT_FOUND", func(t *testing.T) {
+		provider := setup(t, nil)
+		result, err := provider.GetVariant(context.Background(), "missing",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{"distinct_id": "u1"}, false)
+		require.NoError(t, err)
+		require.Equal(t, VariantSourceFallback, result.VariantSource)
+		require.Equal(t, FallbackReasonFlagNotFound, result.FallbackReason)
+		require.Equal(t, "fb", result.VariantValue)
+	})
+
+	t.Run("tags missing context as fallback / MISSING_CONTEXT_KEY", func(t *testing.T) {
+		provider := setup(t, []ExperimentationFlag{makeFlag(100.0, "distinct_id")})
+		result, err := provider.GetVariant(context.Background(), "test-flag",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{}, false)
+		require.NoError(t, err)
+		require.Equal(t, VariantSourceFallback, result.VariantSource)
+		require.Equal(t, FallbackReasonMissingContextKey, result.FallbackReason)
+	})
+
+	t.Run("tags no-rollout-match as fallback / NO_ROLLOUT_MATCH", func(t *testing.T) {
+		provider := setup(t, []ExperimentationFlag{makeFlag(0.0, "distinct_id")})
+		result, err := provider.GetVariant(context.Background(), "test-flag",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{"distinct_id": "u1"}, false)
+		require.NoError(t, err)
+		require.Equal(t, VariantSourceFallback, result.VariantSource)
+		require.Equal(t, FallbackReasonNoRolloutMatch, result.FallbackReason)
+	})
+}
+
 func TestLowercaseKeysAndValues(t *testing.T) {
 	t.Run("lowercases string keys and values", func(t *testing.T) {
 		input := map[string]any{
