@@ -584,6 +584,36 @@ func TestLocalFeatureFlagsProvider_GetVariant_VariantSourceTagging(t *testing.T)
 		require.Equal(t, VariantSourceFallback, result.VariantSource)
 		require.Equal(t, FallbackReasonNoRolloutMatch, result.FallbackReason)
 	})
+
+	t.Run("tags rollout-evaluation failure as fallback / BACKEND_ERROR", func(t *testing.T) {
+		// An unknown jsonlogic operator makes the rule evaluation return
+		// an error, which the provider surfaces as FallbackReasonBackendError.
+		flagWithBadRule := ExperimentationFlag{
+			ID:      "flag-1",
+			Key:     "test-flag",
+			Context: "distinct_id",
+			Ruleset: RuleSet{
+				Variants: []Variant{{Key: "v", Value: "x", Split: 1.0}},
+				Rollout: []Rollout{
+					{
+						RolloutPercentage: 1.0,
+						RuntimeEvaluationRule: map[string]any{
+							"this-is-not-a-real-operator": []any{1, 2},
+						},
+					},
+				},
+			},
+		}
+		provider := setup(t, []ExperimentationFlag{flagWithBadRule})
+		result, err := provider.GetVariant(context.Background(), "test-flag",
+			SelectedVariant{VariantValue: "fb"},
+			FlagContext{"distinct_id": "u1", "custom_properties": map[string]any{"k": "v"}},
+			false)
+		require.Error(t, err)
+		require.Equal(t, VariantSourceFallback, result.VariantSource)
+		require.Equal(t, FallbackReasonBackendError, result.FallbackReason)
+		require.Equal(t, "fb", result.VariantValue)
+	})
 }
 
 func TestLowercaseKeysAndValues(t *testing.T) {
