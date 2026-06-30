@@ -69,10 +69,6 @@ const (
 // when VariantSource == VariantSourceFallback. Matches the constant set used by
 // mixpanel-php so the OpenFeature wrapper can map each reason to the
 // spec-correct error code instead of collapsing every fallback to FLAG_NOT_FOUND.
-//
-// Note: the wrapper handles PROVIDER_NOT_READY by short-circuiting before
-// invoking the provider, so there is no FallbackReasonNotReady here — no
-// producer would ever construct it.
 const (
 	FallbackReasonFlagNotFound      = "FLAG_NOT_FOUND"
 	FallbackReasonMissingContextKey = "MISSING_CONTEXT_KEY"
