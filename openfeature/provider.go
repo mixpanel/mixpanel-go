@@ -178,8 +178,12 @@ func (p *Provider) ObjectEvaluation(ctx context.Context, flag string, defaultVal
 		}
 	}
 
+	// encoding/json decodes all JSON numbers as float64, so nested whole
+	// numbers in object-typed flag values surface as float64 — a caller
+	// writing config["count"].(int) panics. Recurse the same float64 → int64
+	// coercion already used on the input side (see unwrapValue / toFlagContext).
 	return of.InterfaceResolutionDetail{
-		Value:                    value,
+		Value:                    unwrapValue(value),
 		ProviderResolutionDetail: successDetail(variant),
 	}
 }
