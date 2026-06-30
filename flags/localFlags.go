@@ -48,12 +48,13 @@ func NewLocalFeatureFlagsProvider(token string, version string, config LocalFlag
 	}
 	provider := &LocalFeatureFlagsProvider{
 		featureFlagsProvider: featureFlagsProvider{
-			token:          token,
-			apiHost:        config.APIHost,
-			version:        version,
-			evaluationMode: "local",
-			tracker:        tracker,
-			client:         client,
+			token:            token,
+			apiHost:          config.APIHost,
+			version:          version,
+			evaluationMode:   "local",
+			tracker:          tracker,
+			client:           client,
+			exposureExecutor: config.ExposureExecutor,
 		},
 		config:         config,
 		stopPolling:    make(chan struct{}),

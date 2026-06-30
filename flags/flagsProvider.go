@@ -14,12 +14,13 @@ import (
 // The featureFlagsProvider contains common fields and methods shared by providers.
 // i.e LocalFeatureFlagsProvider and RemoteFeatureFlagsProvider
 type featureFlagsProvider struct {
-	token          string
-	apiHost        string
-	version        string
-	evaluationMode string
-	tracker        Tracker
-	client         *http.Client
+	token            string
+	apiHost          string
+	version          string
+	evaluationMode   string
+	tracker          Tracker
+	client           *http.Client
+	exposureExecutor func(send func())
 }
 
 // Manually tracks a feature flag exposure event to Mixpanel.
@@ -54,7 +55,12 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 		properties["Variant fetch latency (ms)"] = float64(latency.Milliseconds())
 	}
 
-	p.tracker(distinctID, exposureEventName, properties)
+	send := func() { p.tracker(distinctID, exposureEventName, properties) }
+	if p.exposureExecutor != nil {
+		p.exposureExecutor(send)
+		return
+	}
+	send()
 }
 
 // callFlagsEndpoint makes an HTTP GET request to a flags API endpoint.
