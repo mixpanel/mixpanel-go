@@ -554,3 +554,99 @@ func TestFlagNotFoundAllTypes(t *testing.T) {
 	assert.Equal(t, map[string]any{"d": 1}, objResult.Value)
 	assert.Contains(t, objResult.ResolutionError.Error(), "FLAG_NOT_FOUND")
 }
+
+// --- Fallback.Reason mapping (SDK-79 / SDK-130) ---
+//
+// The base SDK now tags every fallback SelectedVariant with a VariantSource
+// ("fallback") and a FallbackReason. The wrapper dispatches on that reason
+// instead of collapsing every fallback to FLAG_NOT_FOUND.
+
+// taggedFallback returns a SelectedVariant already tagged with
+// VariantSourceFallback + the given reason, matching what the real
+// remoteFlags / localFlags providers return via AsFallback().
+func taggedFallback(reason string, defaultValue any) flags.SelectedVariant {
+	return flags.SelectedVariant{VariantValue: defaultValue}.AsFallback(reason)
+}
+
+func TestFallbackReasonMissingContextKeyMapsToTargetingKeyMissing(t *testing.T) {
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"needs-key": taggedFallback(flags.FallbackReasonMissingContextKey, false),
+		},
+	}
+	p := mustNewProvider(t, mock)
+
+	result := p.BooleanEvaluation(context.Background(), "needs-key", false, nil)
+	assert.Equal(t, false, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "TARGETING_KEY_MISSING")
+}
+
+func TestFallbackReasonNoRolloutMatchReturnsDefaultWithoutError(t *testing.T) {
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"no-match": taggedFallback(flags.FallbackReasonNoRolloutMatch, "fallback-val"),
+		},
+	}
+	p := mustNewProvider(t, mock)
+
+	result := p.StringEvaluation(context.Background(), "no-match", "fallback-val", nil)
+	assert.Equal(t, "fallback-val", result.Value)
+	assert.Equal(t, of.DefaultReason, result.Reason)
+	// NO_ROLLOUT_MATCH is not an error condition — no ResolutionError
+	// should be attached even though the wrapper returned the caller's
+	// default value.
+	assert.Empty(t, result.ResolutionError.ResolutionErrorCode())
+}
+
+func TestFallbackReasonBackendErrorMapsToGeneral(t *testing.T) {
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"backend-fail": taggedFallback(flags.FallbackReasonBackendError, false),
+		},
+	}
+	p := mustNewProvider(t, mock)
+
+	result := p.BooleanEvaluation(context.Background(), "backend-fail", false, nil)
+	assert.Equal(t, false, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "GENERAL")
+}
+
+func TestFallbackReasonFlagNotFoundMapsToFlagNotFound(t *testing.T) {
+	// Explicit VariantSource-tagged flag-not-found (vs. the belt-and-suspenders
+	// nil-VariantKey path exercised by TestFlagNotFoundAllTypes).
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"tagged-missing": taggedFallback(flags.FallbackReasonFlagNotFound, false),
+		},
+	}
+	p := mustNewProvider(t, mock)
+
+	result := p.BooleanEvaluation(context.Background(), "tagged-missing", true, nil)
+	assert.Equal(t, true, result.Value)
+	assert.Equal(t, of.DefaultReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "FLAG_NOT_FOUND")
+}
+
+func TestFallbackReasonUnknownFailsClosed(t *testing.T) {
+	// Base SDK might add a new FallbackReason value without updating this
+	// wrapper's switch. Fail closed to a general error rather than silently
+	// producing a successful evaluation.
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"unknown-reason": taggedFallback("SOME_NEW_REASON", false),
+		},
+	}
+	p := mustNewProvider(t, mock)
+
+	result := p.BooleanEvaluation(context.Background(), "unknown-reason", false, nil)
+	assert.Equal(t, false, result.Value)
+	assert.Equal(t, of.ErrorReason, result.Reason)
+	assert.Contains(t, result.ResolutionError.Error(), "GENERAL")
+}
