@@ -137,12 +137,12 @@ func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey stri
 	flag, exists := (*flags)[flagKey]
 
 	if !exists {
-		return fallbackVariant, nil
+		return fallbackVariant.AsFallback(FallbackReasonFlagNotFound), nil
 	}
 
 	contextValue, ok := flagContext[flag.Context]
 	if !ok {
-		return fallbackVariant, nil
+		return fallbackVariant.AsFallback(FallbackReasonMissingContextKey), nil
 	}
 
 	var selectedVariant *SelectedVariant
@@ -152,7 +152,7 @@ func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey stri
 	} else {
 		rollout, err := p.getAssignedRollout(flag, contextValue, flagContext)
 		if err != nil {
-			return fallbackVariant, err
+			return fallbackVariant.AsFallback(FallbackReasonBackendError), err
 		}
 		if rollout != nil {
 			selectedVariant = p.getAssignedVariant(flag, contextValue, flagKey, rollout)
@@ -164,10 +164,10 @@ func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey stri
 			latency := time.Since(startTime)
 			p.trackExposure(flagKey, *selectedVariant, flagContext, &latency)
 		}
-		return *selectedVariant, nil
+		return selectedVariant.WithSource(VariantSourceLocal), nil
 	}
 
-	return fallbackVariant, nil
+	return fallbackVariant.AsFallback(FallbackReasonNoRolloutMatch), nil
 }
 
 // GetAllVariants returns all flag variants for the context (no exposure tracking)

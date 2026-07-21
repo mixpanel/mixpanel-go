@@ -70,21 +70,25 @@ func (p *RemoteFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey str
 
 	response, err := p.fetchFlags(ctx, flagContext, &flagKey)
 	if err != nil {
-		return fallbackVariant, fmt.Errorf("failed to fetch flags: %w", err)
+		return fallbackVariant.AsFallback(FallbackReasonBackendError), fmt.Errorf("failed to fetch flags: %w", err)
 	}
 
 	latency := time.Since(startTime)
 
 	selectedVariant, ok := response.Flags[flagKey]
 	if !ok || selectedVariant == nil {
-		return fallbackVariant, nil
+		// The /flags endpoint only returns variants the user is enrolled in,
+		// so a missing key could mean the flag doesn't exist OR the user
+		// isn't in any rollout. The remote SDK can't tell them apart without
+		// server-side help — surface as FLAG_NOT_FOUND for now.
+		return fallbackVariant.AsFallback(FallbackReasonFlagNotFound), nil
 	}
 
 	if reportExposure {
 		p.trackExposure(flagKey, *selectedVariant, flagContext, &latency)
 	}
 
-	return *selectedVariant, nil
+	return selectedVariant.WithSource(VariantSourceRemote), nil
 }
 
 // GetAllVariants returns all flag variants for the context from the remote server
@@ -97,7 +101,7 @@ func (p *RemoteFeatureFlagsProvider) GetAllVariants(ctx context.Context, flagCon
 	result := make(map[string]SelectedVariant)
 	for key, variant := range response.Flags {
 		if variant != nil {
-			result[key] = *variant
+			result[key] = variant.WithSource(VariantSourceRemote)
 		}
 	}
 

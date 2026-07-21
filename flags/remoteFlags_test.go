@@ -178,6 +178,61 @@ func TestRemoteFeatureFlagsProvider_GetAllVariants(t *testing.T) {
 	})
 }
 
+func TestRemoteFeatureFlagsProvider_VariantSourceTagging(t *testing.T) {
+	t.Run("successful variant is tagged as remote with no fallback reason", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		variantKey := "treatment"
+		response := remoteFlagsResponse{
+			Code: 200,
+			Flags: map[string]*SelectedVariant{
+				"test-flag": {VariantKey: &variantKey, VariantValue: true},
+			},
+		}
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			httpmock.NewJsonResponderOrPanic(200, response))
+
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", DefaultRemoteFlagsConfig(), nil)
+		result, err := provider.GetVariant(context.Background(), "test-flag",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{"distinct_id": "u1"}, false)
+		require.NoError(t, err)
+		require.Equal(t, VariantSourceRemote, result.VariantSource)
+		require.Empty(t, result.FallbackReason)
+	})
+
+	t.Run("missing flag is tagged as fallback / FLAG_NOT_FOUND", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			httpmock.NewJsonResponderOrPanic(200, remoteFlagsResponse{Code: 200, Flags: map[string]*SelectedVariant{}}))
+
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", DefaultRemoteFlagsConfig(), nil)
+		result, err := provider.GetVariant(context.Background(), "missing-flag",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{"distinct_id": "u1"}, false)
+		require.NoError(t, err)
+		require.Equal(t, VariantSourceFallback, result.VariantSource)
+		require.Equal(t, FallbackReasonFlagNotFound, result.FallbackReason)
+	})
+
+	t.Run("network failure is tagged as fallback / BACKEND_ERROR", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			httpmock.NewStringResponder(500, "boom"))
+
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", DefaultRemoteFlagsConfig(), nil)
+		result, err := provider.GetVariant(context.Background(), "any-flag",
+			SelectedVariant{VariantValue: "fb"}, FlagContext{"distinct_id": "u1"}, false)
+		require.Error(t, err)
+		require.Equal(t, VariantSourceFallback, result.VariantSource)
+		require.Equal(t, FallbackReasonBackendError, result.FallbackReason)
+		require.Equal(t, "fb", result.VariantValue)
+	})
+}
+
 func TestRemoteFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 	t.Run("tracks exposure event with correct properties", func(t *testing.T) {
 		httpmock.Activate()

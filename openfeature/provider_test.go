@@ -212,6 +212,50 @@ func TestObjectEvaluation(t *testing.T) {
 	assert.Equal(t, "config", result.Variant)
 }
 
+// encoding/json decodes JSON numbers as float64. Callers writing
+// config["count"].(int) on a remote-evaluated object would panic on
+// `interface conversion: interface {} is float64, not int`. The wrapper
+// runs the resolved value through unwrapValue so nested whole-number
+// floats surface as int64, matching the conversion IntEvaluation does.
+func TestObjectEvaluationCoercesWholeNumbersToInt64(t *testing.T) {
+	// Simulate a server-decoded object: all numbers arrive as float64.
+	decoded := map[string]any{
+		"count":      float64(2),
+		"ratio":      0.5,
+		"nested_obj": map[string]any{"max": float64(10)},
+		"nested_arr": []any{float64(1), float64(2), "three", 4.2},
+	}
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"obj-flag": {VariantKey: strPtr("config"), VariantValue: decoded},
+		},
+	}
+	p := mustNewProvider(t, mock)
+	ctx := context.Background()
+
+	result := p.ObjectEvaluation(ctx, "obj-flag", nil, nil).Value.(map[string]any)
+	assert.Equal(t, int64(2), result["count"])
+	assert.Equal(t, 0.5, result["ratio"])
+	assert.Equal(t, map[string]any{"max": int64(10)}, result["nested_obj"])
+	assert.Equal(t, []any{int64(1), int64(2), "three", 4.2}, result["nested_arr"])
+}
+
+// Top-level slices (object-typed flags that hold a JSON array) get the
+// same recursion treatment.
+func TestObjectEvaluationCoercesTopLevelSlice(t *testing.T) {
+	mock := &mockFlagsProvider{
+		ready: true,
+		variants: map[string]flags.SelectedVariant{
+			"arr-flag": {VariantKey: strPtr("v"), VariantValue: []any{float64(1), float64(2), float64(3)}},
+		},
+	}
+	p := mustNewProvider(t, mock)
+
+	result := p.ObjectEvaluation(context.Background(), "arr-flag", nil, nil)
+	assert.Equal(t, []any{int64(1), int64(2), int64(3)}, result.Value)
+}
+
 func TestContextPassedThrough(t *testing.T) {
 	// Use a custom mock that captures the flag context
 	var capturedContext flags.FlagContext
