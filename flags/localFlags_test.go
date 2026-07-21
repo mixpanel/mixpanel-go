@@ -638,3 +638,106 @@ func TestLowercaseKeysAndValues(t *testing.T) {
 		require.Equal(t, "john", user["name"])
 	})
 }
+
+func TestLocalFeatureFlagsProvider_ExposureExecutor(t *testing.T) {
+	t.Run("invokes ExposureExecutor instead of calling tracker inline", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		var executorCalls int
+		var capturedSend func()
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+		config.ExposureExecutor = func(send func()) {
+			executorCalls++
+			capturedSend = send
+		}
+
+		var trackerCalls int
+		tracker := func(_ string, _ string, _ map[string]any) { trackerCalls++ }
+
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		flags := experimentationFlagsResponse{
+			Flags: []ExperimentationFlag{{
+				ID: "flag-1", Key: "test-flag", Context: "distinct_id",
+				Ruleset: RuleSet{
+					Variants: []Variant{{Key: "variant", Value: "test", Split: 1.0}},
+					Rollout:  []Rollout{{RolloutPercentage: 1.0}},
+				},
+			}},
+		}
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+			httpmock.NewJsonResponderOrPanic(200, flags))
+
+		ctx := context.Background()
+		require.NoError(t, provider.StartPollingForDefinitions(ctx))
+
+		_, err := provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, true)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, executorCalls, "executor should be invoked once")
+		require.Equal(t, 0, trackerCalls, "tracker should not be called inline when executor is set")
+		require.NotNil(t, capturedSend)
+
+		capturedSend()
+		require.Equal(t, 1, trackerCalls, "running the captured send closure invokes the tracker")
+	})
+
+	t.Run("nil ExposureExecutor runs tracker inline (default)", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		var trackerCalls int
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+		require.Nil(t, config.ExposureExecutor)
+
+		tracker := func(_ string, _ string, _ map[string]any) { trackerCalls++ }
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		flags := experimentationFlagsResponse{
+			Flags: []ExperimentationFlag{{
+				ID: "flag-1", Key: "test-flag", Context: "distinct_id",
+				Ruleset: RuleSet{
+					Variants: []Variant{{Key: "variant", Value: "test", Split: 1.0}},
+					Rollout:  []Rollout{{RolloutPercentage: 1.0}},
+				},
+			}},
+		}
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+			httpmock.NewJsonResponderOrPanic(200, flags))
+
+		ctx := context.Background()
+		require.NoError(t, provider.StartPollingForDefinitions(ctx))
+
+		_, err := provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, true)
+		require.NoError(t, err)
+		require.Equal(t, 1, trackerCalls)
+	})
+
+	t.Run("TrackExposureEvent (manual API) also honors ExposureExecutor", func(t *testing.T) {
+		var capturedSend func()
+		var executorCalls int
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+		config.ExposureExecutor = func(send func()) {
+			executorCalls++
+			capturedSend = send
+		}
+
+		var trackerCalls int
+		tracker := func(_ string, _ string, _ map[string]any) { trackerCalls++ }
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		variantKey := "treatment"
+		provider.TrackExposureEvent(context.Background(), "manual-flag",
+			SelectedVariant{VariantKey: &variantKey, VariantValue: "x"},
+			FlagContext{"distinct_id": "user123"})
+
+		require.Equal(t, 1, executorCalls)
+		require.Equal(t, 0, trackerCalls)
+		capturedSend()
+		require.Equal(t, 1, trackerCalls)
+	})
+}

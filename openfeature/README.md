@@ -187,6 +187,42 @@ When your application is shutting down, call `Shutdown()` to stop background pol
 provider.Shutdown()
 ```
 
+### Async Exposure Tracking
+
+By default, every flag evaluation tracks an exposure event inline — the `/track` HTTP round trip happens on the calling goroutine before the evaluation method returns. For latency-sensitive code paths, set `ExposureExecutor` on the config so exposure tracking runs off-goroutine:
+
+```go
+config := flags.DefaultLocalFlagsConfig()
+config.ExposureExecutor = func(send func()) { go send() }
+
+provider, _ := mixpanelopenfeature.NewProviderWithLocalConfig("YOUR_TOKEN", config)
+```
+
+For bounded concurrency that never blocks the caller, use a non-blocking
+`select` — exposures are dropped once the in-flight cap is reached:
+
+```go
+sem := make(chan struct{}, 4)
+config.ExposureExecutor = func(send func()) {
+    select {
+    case sem <- struct{}{}:
+        go func() {
+            defer func() { <-sem }()
+            send()
+        }()
+    default:
+        // At capacity — drop the exposure rather than stall the caller.
+    }
+}
+```
+
+If you'd rather queue than drop, back the executor with a pre-spawned
+worker pool that reads from a buffered channel — that keeps the caller
+non-blocking as long as the queue has room, and lets you decide the
+buffer size and worker count explicitly.
+
+Available on both `LocalFlagsConfig` and `RemoteFlagsConfig`. Defaults to `nil` (inline behavior); existing setups are unaffected.
+
 ## Context Mapping
 
 All properties in the OpenFeature `EvaluationContext` are passed directly to Mixpanel's flag evaluation. There is no transformation or filtering of properties.

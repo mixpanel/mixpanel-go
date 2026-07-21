@@ -24,6 +24,10 @@ type FlagsConfig struct {
 	APIHost        string
 	RequestTimeout time.Duration
 	HTTPClient     *http.Client
+	// ExposureExecutor, if set, runs the exposure tracker call so flag
+	// evaluation does not block on the /track round trip. nil keeps the
+	// existing inline behavior. Typical implementation: `func(send func()) { go send() }`.
+	ExposureExecutor func(send func())
 }
 
 type LocalFlagsConfig struct {

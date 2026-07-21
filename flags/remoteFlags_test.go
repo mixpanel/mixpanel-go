@@ -318,6 +318,96 @@ func TestRemoteFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 	})
 }
 
+func TestRemoteFeatureFlagsProvider_ExposureExecutor(t *testing.T) {
+	t.Run("invokes ExposureExecutor instead of calling tracker inline", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		var executorCalls int
+		var capturedSend func()
+		config := DefaultRemoteFlagsConfig()
+		config.ExposureExecutor = func(send func()) {
+			executorCalls++
+			capturedSend = send
+		}
+
+		var trackerCalls int
+		tracker := func(_ string, _ string, _ map[string]any) { trackerCalls++ }
+
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		variantKey := "enabled"
+		response := remoteFlagsResponse{
+			Code: 200,
+			Flags: map[string]*SelectedVariant{
+				"test-flag": {VariantKey: &variantKey, VariantValue: true},
+			},
+		}
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			httpmock.NewJsonResponderOrPanic(200, response))
+
+		ctx := context.Background()
+		_, err := provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, true)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, executorCalls)
+		require.Equal(t, 0, trackerCalls, "tracker must not run inline when executor is set")
+		capturedSend()
+		require.Equal(t, 1, trackerCalls)
+	})
+
+	t.Run("nil ExposureExecutor runs tracker inline (default)", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		var trackerCalls int
+		config := DefaultRemoteFlagsConfig()
+		require.Nil(t, config.ExposureExecutor)
+
+		tracker := func(_ string, _ string, _ map[string]any) { trackerCalls++ }
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		variantKey := "enabled"
+		response := remoteFlagsResponse{
+			Code: 200,
+			Flags: map[string]*SelectedVariant{
+				"test-flag": {VariantKey: &variantKey, VariantValue: true},
+			},
+		}
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			httpmock.NewJsonResponderOrPanic(200, response))
+
+		ctx := context.Background()
+		_, err := provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, true)
+		require.NoError(t, err)
+		require.Equal(t, 1, trackerCalls)
+	})
+
+	t.Run("TrackExposureEvent (manual API) also honors ExposureExecutor", func(t *testing.T) {
+		var capturedSend func()
+		var executorCalls int
+		config := DefaultRemoteFlagsConfig()
+		config.ExposureExecutor = func(send func()) {
+			executorCalls++
+			capturedSend = send
+		}
+
+		var trackerCalls int
+		tracker := func(_ string, _ string, _ map[string]any) { trackerCalls++ }
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		variantKey := "treatment"
+		provider.TrackExposureEvent(context.Background(), "manual-flag",
+			SelectedVariant{VariantKey: &variantKey, VariantValue: "x"},
+			FlagContext{"distinct_id": "user123"})
+
+		require.Equal(t, 1, executorCalls)
+		require.Equal(t, 0, trackerCalls)
+		capturedSend()
+		require.Equal(t, 1, trackerCalls)
+	})
+}
+
 func TestRemoteFeatureFlagsProvider_RequestFormat(t *testing.T) {
 	t.Run("sends correct query parameters", func(t *testing.T) {
 		httpmock.Activate()
