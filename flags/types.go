@@ -56,12 +56,51 @@ func DefaultRemoteFlagsConfig() RemoteFlagsConfig {
 	}
 }
 
+// VariantSource — where a SelectedVariant came from. Set by the providers on
+// every returned variant. Coarse-grained (local / remote / fallback); see
+// FallbackReason for the specific reason behind a fallback.
+const (
+	VariantSourceLocal    = "local"
+	VariantSourceRemote   = "remote"
+	VariantSourceFallback = "fallback"
+)
+
+// FallbackReason — why the SDK returned the developer fallback. Only meaningful
+// when VariantSource == VariantSourceFallback. Matches the constant set used by
+// mixpanel-php so the OpenFeature wrapper can map each reason to the
+// spec-correct error code instead of collapsing every fallback to FLAG_NOT_FOUND.
+const (
+	FallbackReasonFlagNotFound      = "FLAG_NOT_FOUND"
+	FallbackReasonMissingContextKey = "MISSING_CONTEXT_KEY"
+	FallbackReasonNoRolloutMatch    = "NO_ROLLOUT_MATCH"
+	FallbackReasonBackendError      = "BACKEND_ERROR"
+)
+
 type SelectedVariant struct {
 	VariantKey         *string `json:"variant_key"`
 	VariantValue       any     `json:"variant_value"`
 	ExperimentID       *string `json:"experiment_id,omitempty"`
 	IsExperimentActive *bool   `json:"is_experiment_active,omitempty"`
 	IsQATester         *bool   `json:"is_qa_tester,omitempty"`
+	VariantSource      string  `json:"variant_source,omitempty"`
+	// FallbackReason is empty on success; one of the FallbackReason* constants
+	// when VariantSource is VariantSourceFallback.
+	FallbackReason string `json:"fallback_reason,omitempty"`
+}
+
+// WithSource returns a copy of v tagged with the given source. Clears
+// FallbackReason — use AsFallback when returning a fallback.
+func (v SelectedVariant) WithSource(source string) SelectedVariant {
+	v.VariantSource = source
+	v.FallbackReason = ""
+	return v
+}
+
+// AsFallback returns a copy of v tagged as a fallback with the given reason.
+func (v SelectedVariant) AsFallback(reason string) SelectedVariant {
+	v.VariantSource = VariantSourceFallback
+	v.FallbackReason = reason
+	return v
 }
 
 type Variant struct {
