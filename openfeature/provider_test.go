@@ -597,8 +597,9 @@ func TestFallbackReasonNoRolloutMatchReturnsDefaultWithoutError(t *testing.T) {
 	assert.Equal(t, of.DefaultReason, result.Reason)
 	// NO_ROLLOUT_MATCH is not an error condition — no ResolutionError
 	// should be attached even though the wrapper returned the caller's
-	// default value.
-	assert.Empty(t, result.ResolutionError.ResolutionErrorCode())
+	// default value. The openfeature Go SDK's ResolutionError has
+	// unexported fields, so compare to the zero value directly.
+	assert.Equal(t, of.ResolutionError{}, result.ResolutionError)
 }
 
 func TestFallbackReasonBackendErrorMapsToGeneral(t *testing.T) {
