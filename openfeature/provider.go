@@ -193,6 +193,8 @@ type resolveErrorKind int
 const (
 	errProviderNotReady resolveErrorKind = iota
 	errFlagNotFound
+	errTargetingKeyMissing
+	errNoRolloutMatch
 	errGeneral
 )
 
@@ -217,12 +219,45 @@ func (p *Provider) resolve(ctx context.Context, flagKey string, defaultValue any
 		return nil, "", &resolveError{kind: errGeneral, message: err.Error()}
 	}
 
-	// If no variant key was returned, the flag was not found
+	// A fallback source means the SDK had no real variant to serve. The
+	// reason discriminates why (flag missing, context key missing, no rule
+	// matched, backend error) so we map each to the OpenFeature error the
+	// spec assigns to it instead of collapsing every fallback to FLAG_NOT_FOUND.
+	if variant.VariantSource == flags.VariantSourceFallback {
+		return nil, "", fallbackReasonError(variant.FallbackReason, flagKey)
+	}
+
+	// Belt-and-suspenders: if a custom flags provider returns a nil
+	// VariantKey without tagging the variant as a fallback, treat it as
+	// flag-not-found rather than a successful match on nil.
 	if variant.VariantKey == nil {
 		return nil, "", &resolveError{kind: errFlagNotFound, message: fmt.Sprintf("flag not found: %s", flagKey)}
 	}
 
 	return variant.VariantValue, *variant.VariantKey, nil
+}
+
+// fallbackReasonError maps a base-SDK FallbackReason constant to the resolve
+// error kind that errorDetail translates into the correct OpenFeature response.
+// The mapping matches PHP/Python/Ruby: NO_ROLLOUT_MATCH is not an error
+// (returns DEFAULT reason with the caller's default value), everything else
+// carries an error code.
+func fallbackReasonError(reason, flagKey string) error {
+	switch reason {
+	case flags.FallbackReasonFlagNotFound:
+		return &resolveError{kind: errFlagNotFound, message: fmt.Sprintf("flag not found: %s", flagKey)}
+	case flags.FallbackReasonMissingContextKey:
+		return &resolveError{kind: errTargetingKeyMissing, message: fmt.Sprintf("missing targeting key for flag: %s", flagKey)}
+	case flags.FallbackReasonNoRolloutMatch:
+		return &resolveError{kind: errNoRolloutMatch, message: ""}
+	case flags.FallbackReasonBackendError:
+		return &resolveError{kind: errGeneral, message: fmt.Sprintf("backend error evaluating flag: %s", flagKey)}
+	default:
+		// Unknown reason (e.g., new value added to base SDK without a
+		// corresponding case here) — surface as general error so silent
+		// regressions don't get misread as successful evaluations.
+		return &resolveError{kind: errGeneral, message: fmt.Sprintf("unrecognized fallback reason %q for flag: %s", reason, flagKey)}
+	}
 }
 
 func toFlagContext(evalCtx of.FlattenedContext) flags.FlagContext {
@@ -282,6 +317,13 @@ func errorDetail(err error) of.ProviderResolutionDetail {
 	case errFlagNotFound:
 		resErr = of.NewFlagNotFoundResolutionError(re.message)
 		reason = of.DefaultReason
+	case errTargetingKeyMissing:
+		resErr = of.NewTargetingKeyMissingResolutionError(re.message)
+		reason = of.ErrorReason
+	case errNoRolloutMatch:
+		// Flag exists but no rule matched — per the OpenFeature spec this
+		// is DEFAULT with no error, distinct from FLAG_NOT_FOUND.
+		return of.ProviderResolutionDetail{Reason: of.DefaultReason}
 	default:
 		resErr = of.NewGeneralResolutionError(re.message)
 		reason = of.ErrorReason

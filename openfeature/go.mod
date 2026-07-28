@@ -3,7 +3,7 @@ module github.com/mixpanel/mixpanel-go/openfeature
 go 1.22
 
 require (
-	github.com/mixpanel/mixpanel-go/v2 v2.0.0
+	github.com/mixpanel/mixpanel-go/v2 v2.1.0
 	github.com/open-feature/go-sdk v1.13.0
 	github.com/stretchr/testify v1.10.0
 )
