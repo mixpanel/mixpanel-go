@@ -1,6 +1,6 @@
 # Mixpanel OpenFeature Provider for Go
 
-##### _May 13, 2026_ - [openfeature/v0.1.0](https://github.com/mixpanel/mixpanel-go/releases/tag/openfeature/v0.1.0)
+##### _July 28, 2026_ - [openfeature/v0.2.0](https://github.com/mixpanel/mixpanel-go/releases/tag/openfeature/v0.2.0)
 
 An [OpenFeature](https://openfeature.dev/) provider that wraps Mixpanel's feature flags for use with the OpenFeature Go SDK. This allows you to use Mixpanel's feature flagging capabilities through OpenFeature's standardized, vendor-agnostic API.
 
