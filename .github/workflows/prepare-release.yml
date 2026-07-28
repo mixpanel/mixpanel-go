@@ -11,6 +11,11 @@ on:
         description: 'Release version (e.g., 2.1.0 or 2.1.0-beta.1)'
         required: true
         type: string
+      allow_existing_tag:
+        description: 'Skip the tag-already-exists guard (use to backfill CHANGELOG/README for a tag that was pushed without going through this workflow).'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -64,6 +69,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate version not already released
+        if: ${{ !inputs.allow_existing_tag }}
         env:
           TAG: ${{ steps.config.outputs.tag }}
         run: |
