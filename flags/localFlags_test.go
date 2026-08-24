@@ -311,6 +311,78 @@ func TestLocalFeatureFlagsProvider_RuntimeEvaluation(t *testing.T) {
 	})
 }
 
+func TestLocalFeatureFlagsProvider_CustomOperators(t *testing.T) {
+	newProvider := func(t *testing.T, rule map[string]any) *LocalFeatureFlagsProvider {
+		t.Helper()
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, nil)
+
+		flags := experimentationFlagsResponse{
+			Flags: []ExperimentationFlag{
+				{
+					ID:      "flag-1",
+					Key:     "custom-op-flag",
+					Status:  "active",
+					Context: "distinct_id",
+					Ruleset: RuleSet{
+						Variants: []Variant{{Key: "variant", Value: "enabled", Split: 1.0}},
+						Rollout:  []Rollout{{RolloutPercentage: 1.0, RuntimeEvaluationRule: rule}},
+					},
+				},
+			},
+		}
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+			httpmock.NewJsonResponderOrPanic(200, flags))
+		require.NoError(t, provider.StartPollingForDefinitions(context.Background()))
+		return provider
+	}
+
+	t.Run("semver_compare routes through the provider", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		rule := map[string]any{"semver_compare": []any{map[string]any{"var": "app_version"}, ">=", "2.0.0"}}
+		provider := newProvider(t, rule)
+
+		result, err := provider.GetVariantValue(context.Background(), "custom-op-flag", "fallback", FlagContext{
+			"distinct_id":       "user1",
+			"custom_properties": map[string]any{"app_version": "2.3.0"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "enabled", result)
+
+		result, err = provider.GetVariantValue(context.Background(), "custom-op-flag", "fallback", FlagContext{
+			"distinct_id":       "user2",
+			"custom_properties": map[string]any{"app_version": "1.9.0"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "fallback", result)
+	})
+
+	t.Run("datetime_compare routes through the provider", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		rule := map[string]any{"datetime_compare": []any{map[string]any{"var": "signup"}, "<", float64(jul16Ms)}}
+		provider := newProvider(t, rule)
+
+		result, err := provider.GetVariantValue(context.Background(), "custom-op-flag", "fallback", FlagContext{
+			"distinct_id":       "user1",
+			"custom_properties": map[string]any{"signup": "2026-07-15T00:00:00Z"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "enabled", result)
+
+		result, err = provider.GetVariantValue(context.Background(), "custom-op-flag", "fallback", FlagContext{
+			"distinct_id":       "user2",
+			"custom_properties": map[string]any{"signup": "2026-07-17T00:00:00Z"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "fallback", result)
+	})
+}
+
 func TestLocalFeatureFlagsProvider_GetAllVariants(t *testing.T) {
 	t.Run("returns all applicable variants", func(t *testing.T) {
 		httpmock.Activate()
