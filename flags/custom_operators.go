@@ -20,6 +20,11 @@ var rfc3339Regex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\
 // SemVer 2.0.0 requires major.minor.patch; partial versions are zero-padded to this.
 const semverParts = 3
 
+// Longest operand the semver regex is allowed to see. A real version never approaches this; the
+// bound matches MAX_LENGTH in node-semver, and keeps an arbitrarily long property value off the
+// regex regardless of how the engine schedules backtracking.
+const maxSemverLength = 256
+
 // Register the operators into jsonlogic's process-global registry when the package loads.
 func init() {
 	jsonlogic.AddOperator("semver_compare", semverCompare)
@@ -39,6 +44,9 @@ func semverCompare(values, _ any) any {
 	}
 	targetStr, ok := target.(string)
 	if !ok {
+		return false
+	}
+	if len(actualStr) > maxSemverLength || len(targetStr) > maxSemverLength {
 		return false
 	}
 	actualVersion := normalizeSemver(actualStr)
