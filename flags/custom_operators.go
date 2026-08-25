@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/diegoholiveira/jsonlogic/v3"
 )
 
@@ -47,15 +46,99 @@ func semverCompare(values, _ any) any {
 	if !semverRegex.MatchString(actualVersion) || !semverRegex.MatchString(targetVersion) {
 		return false
 	}
-	actualVer, err := semver.NewVersion(actualVersion)
-	if err != nil {
+	cmp := compareSemver(actualVersion, targetVersion)
+	return comparatorMatches(cmp, symbol)
+}
+
+// Strip optional build metadata and separate the core version from pre-release identifiers
+func splitSemver(version string) (core, prerelease []string) {
+	if plus := strings.Index(version, `+`); plus != -1 {
+		version = version[:plus]
+	}
+	dash := strings.Index(version, `-`)
+	if dash == -1 {
+		return strings.Split(version, `.`), nil
+	}
+	return strings.Split(version[:dash], `.`), strings.Split(version[dash+1:], `.`)
+}
+
+func isNumericIdentifier(identifier string) bool {
+	if identifier == `` {
 		return false
 	}
-	targetVer, err := semver.NewVersion(targetVersion)
-	if err != nil {
-		return false
+	for i := 0; i < len(identifier); i++ {
+		if identifier[i] < '0' || identifier[i] > '9' {
+			return false
+		}
 	}
-	return comparatorMatches(actualVer.Compare(targetVer), symbol)
+	return true
+}
+
+// Numeric identifiers carry no leading zeros, so the longer run of digits is the larger number.
+// Comparing them as digits rather than parsing to a fixed-width integer keeps versions that overflow
+// an int64 ordered correctly.
+func compareNumeric(a, b string) int {
+	if len(a) != len(b) {
+		if len(a) < len(b) {
+			return -1
+		}
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
+// SemVer 2.0.0 section 11.4: digits compare numerically, a numeric identifier ranks below an
+// alphanumeric one, and anything else compares by ASCII order.
+func comparePrereleaseIdentifier(a, b string) int {
+	aNumeric, bNumeric := isNumericIdentifier(a), isNumericIdentifier(b)
+	switch {
+	case aNumeric && bNumeric:
+		return compareNumeric(a, b)
+	case aNumeric:
+		return -1
+	case bNumeric:
+		return 1
+	default:
+		return strings.Compare(a, b)
+	}
+}
+
+// Ordering per SemVer 2.0.0 section 11. Both operands have already been normalized and matched
+// against the official regex, so the core holds exactly three numeric identifiers and every
+// prerelease field is well-formed; the split needs no error path.
+func compareSemver(a, b string) int {
+	aCore, aPrerelease := splitSemver(a)
+	bCore, bPrerelease := splitSemver(b)
+
+	for i := range aCore {
+		if result := compareNumeric(aCore[i], bCore[i]); result != 0 {
+			return result
+		}
+	}
+
+	// A prerelease ranks below the release it belongs to (section 11.3).
+	switch {
+	case len(aPrerelease) == 0 && len(bPrerelease) == 0:
+		return 0
+	case len(aPrerelease) == 0:
+		return 1
+	case len(bPrerelease) == 0:
+		return -1
+	}
+
+	for i := 0; i < len(aPrerelease) && i < len(bPrerelease); i++ {
+		if result := comparePrereleaseIdentifier(aPrerelease[i], bPrerelease[i]); result != 0 {
+			return result
+		}
+	}
+	// Every field so far is equal, so the longer list wins (section 11.4.4).
+	switch {
+	case len(aPrerelease) < len(bPrerelease):
+		return -1
+	case len(aPrerelease) > len(bPrerelease):
+		return 1
+	}
+	return 0
 }
 
 // Implements a custom operation for datetime comparison. The target value stored on the feature flag is
@@ -73,7 +156,8 @@ func datetimeCompare(values, _ any) any {
 	if !ok {
 		return false
 	}
-	return comparatorMatches(int(actualSec-targetSec), symbol)
+	cmp := int(actualSec - targetSec)
+	return comparatorMatches(cmp, symbol)
 }
 
 func operands(values any) (actual any, symbol string, target any, ok bool) {
@@ -89,9 +173,9 @@ func operands(values any) (actual any, symbol string, target any, ok bool) {
 
 func comparatorMatches(cmp int, symbol string) bool {
 	switch symbol {
-	case `=`:
+	case `===`:
 		return cmp == 0
-	case `!=`:
+	case `!==`:
 		return cmp != 0
 	case `<`:
 		return cmp < 0

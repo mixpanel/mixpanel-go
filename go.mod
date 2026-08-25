@@ -3,7 +3,6 @@ module github.com/mixpanel/mixpanel-go/v2
 go 1.19
 
 require (
-	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/diegoholiveira/jsonlogic/v3 v3.9.0
 	github.com/jarcoal/httpmock v1.3.1
 	github.com/stretchr/testify v1.10.0

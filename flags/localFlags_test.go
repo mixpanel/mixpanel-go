@@ -338,6 +338,9 @@ func TestLocalFeatureFlagsProvider_CustomOperators(t *testing.T) {
 		return provider
 	}
 
+	// 2026-07-16T00:00:00Z, as epoch milliseconds — the shape the feature-flags UI emits.
+	const jul16Ms = 1_784_160_000_000
+
 	t.Run("semver_compare routes through the provider", func(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
