@@ -2,7 +2,7 @@
 
 #  Mixpanel Go SDK
 
-##### _July 24, 2026_ - [v2.1.0](https://github.com/mixpanel/mixpanel-go/releases/tag/v2.1.0)
+##### _September 01, 2026_ - [v2.2.0](https://github.com/mixpanel/mixpanel-go/releases/tag/v2.2.0)
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/mixpanel/mixpanel-go.svg)](https://pkg.go.dev/github.com/mixpanel/mixpanel-go)
 [![Go](https://github.com/mixpanel/mixpanel-go/actions/workflows/testing.yaml/badge.svg)](https://github.com/mixpanel/mixpanel-go/actions/workflows/testing.yaml)

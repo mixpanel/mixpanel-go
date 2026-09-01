@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.2.0](https://github.com/mixpanel/mixpanel-go/tree/v2.2.0) (2026-09-01)
+
+### Features
+- Implement semver and date custom ops for flags runtime props ([#105](https://github.com/mixpanel/mixpanel-go/pull/105))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-go/compare/v2.1.0...v2.2.0)
+
 ## [v2.1.0](https://github.com/mixpanel/mixpanel-go/tree/v2.1.0) (2026-07-24)
 
 ### Features
