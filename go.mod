@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/diegoholiveira/jsonlogic/v3 v3.9.0
-	github.com/jarcoal/httpmock v1.3.1
+	github.com/jarcoal/httpmock v1.4.1
 	github.com/stretchr/testify v1.10.0
 )
 
