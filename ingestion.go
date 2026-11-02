@@ -286,9 +286,31 @@ type peopleSetPayload struct {
 
 // PeopleSet calls the User Set Property API
 // https://developer.mixpanel.com/reference/profile-set
+//
+// On a hierarchical groups client the update goes to the $user_id group profile through /groups,
+// so the distinct ids must have the form $company:{company}|$user:{user}. If any distinct id has
+// another form it returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) error {
 	if len(people) > MaxPeopleEvents {
 		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
+	}
+
+	if a.hierarchicalGroups {
+		payloads := make([]groupSetPropertyPayload, len(people))
+		for i, p := range people {
+			userID, companyID, err := hierarchicalProfile(p.DistinctID)
+			if err != nil {
+				return err
+			}
+			payloads[i] = groupSetPropertyPayload{
+				Token:     a.token,
+				GroupKey:  userIDGroupKey,
+				GroupId:   userID,
+				Set:       p.Properties,
+				CompanyID: companyID,
+			}
+		}
+		return a.doPeopleRequest(ctx, payloads, groupSetUrl)
 	}
 
 	payloads := make([]peopleSetPayload, len(people))
@@ -313,9 +335,29 @@ type peopleSetOncePayload struct {
 
 // PeopleSetOnce calls the User Set Property Once API
 // https://developer.mixpanel.com/reference/profile-set-property-once
+//
+// On a hierarchical groups client the distinct ids are handled as in PeopleSet.
 func (a *ApiClient) PeopleSetOnce(ctx context.Context, people []*PeopleProperties) error {
 	if len(people) > MaxPeopleEvents {
 		return fmt.Errorf("max people events is %d", MaxPeopleEvents)
+	}
+
+	if a.hierarchicalGroups {
+		payloads := make([]groupSetOncePropertyPayload, len(people))
+		for i, p := range people {
+			userID, companyID, err := hierarchicalProfile(p.DistinctID)
+			if err != nil {
+				return err
+			}
+			payloads[i] = groupSetOncePropertyPayload{
+				Token:     a.token,
+				GroupKey:  userIDGroupKey,
+				GroupId:   userID,
+				SetOnce:   p.Properties,
+				CompanyID: companyID,
+			}
+		}
+		return a.doPeopleRequest(ctx, payloads, groupsSetOnceUrl)
 	}
 
 	payloads := make([]peopleSetOncePayload, len(people))
@@ -338,7 +380,12 @@ type peopleNumericalAddPayload struct {
 
 // PeopleIncrement calls the User Increment Numerical Property API
 // https://developer.mixpanel.com/reference/profile-numerical-add
+//
+// Returns ErrUnsupportedHierarchicalOperation on a hierarchical groups client.
 func (a *ApiClient) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
+	if err := a.requireGroupOperation("$add"); err != nil {
+		return err
+	}
 	payload := []peopleNumericalAddPayload{
 		{
 			Token:      a.token,
@@ -357,7 +404,18 @@ type peopleUnionPayload struct {
 
 // PeopleUnionProperty calls User Union To List Property API
 // https://developer.mixpanel.com/reference/user-profile-union
+//
+// On a hierarchical groups client the update goes to the $user_id group profile through /groups,
+// so the distinct id must have the form $company:{company}|$user:{user}. Any other distinct id
+// returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
+	if a.hierarchicalGroups {
+		userID, companyID, err := hierarchicalProfile(distinctID)
+		if err != nil {
+			return err
+		}
+		return a.groupUnionListProperty(ctx, userIDGroupKey, userID, union, companyID)
+	}
 	payload := []peopleUnionPayload{
 		{
 			Token:      a.token,
@@ -376,7 +434,12 @@ type peopleAppendListPayload struct {
 
 // PeopleAppend calls the Increment Numerical Property
 // https://developer.mixpanel.com/reference/profile-numerical-add
+//
+// Returns ErrUnsupportedHierarchicalOperation on a hierarchical groups client.
 func (a *ApiClient) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error {
+	if err := a.requireGroupOperation("$append"); err != nil {
+		return err
+	}
 	payload := []peopleAppendListPayload{
 		{
 			Token:      a.token,
@@ -395,7 +458,18 @@ type peopleListRemovePayload struct {
 
 // PeopleRemoveListProperty calls the User Remove from List Property API
 // https://developer.mixpanel.com/reference/profile-remove-from-list-property
+//
+// On a hierarchical groups client the update goes to the $user_id group profile through /groups,
+// so the distinct id must have the form $company:{company}|$user:{user}. Any other distinct id
+// returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
+	if a.hierarchicalGroups {
+		userID, companyID, err := hierarchicalProfile(distinctID)
+		if err != nil {
+			return err
+		}
+		return a.groupRemoveListProperty(ctx, userIDGroupKey, userID, remove, companyID)
+	}
 	payload := []peopleListRemovePayload{
 		{
 			Token:      a.token,
@@ -414,7 +488,18 @@ type peopleDeletePropertyPayload struct {
 
 // PeopleDeleteProperty calls the User Delete Property API
 // https://developer.mixpanel.com/reference/profile-delete-property
+//
+// On a hierarchical groups client the update goes to the $user_id group profile through /groups,
+// so the distinct id must have the form $company:{company}|$user:{user}. Any other distinct id
+// returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
+	if a.hierarchicalGroups {
+		userID, companyID, err := hierarchicalProfile(distinctID)
+		if err != nil {
+			return err
+		}
+		return a.groupDeleteProperty(ctx, userIDGroupKey, userID, unset, companyID)
+	}
 	payload := []peopleDeletePropertyPayload{
 		{
 			Token:      a.token,
@@ -434,7 +519,18 @@ type peopleDeleteProfilePayload struct {
 
 // PeopleDeleteProfile calls the User Delete Profile API
 // https://developer.mixpanel.com/reference/delete-profile
+//
+// On a hierarchical groups client this deletes the $user_id group profile through /groups, so the
+// distinct id must have the form $company:{company}|$user:{user}, and ignoreAlias is not sent. Any
+// other distinct id returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
+	if a.hierarchicalGroups {
+		userID, companyID, err := hierarchicalProfile(distinctID)
+		if err != nil {
+			return err
+		}
+		return a.groupDelete(ctx, userIDGroupKey, userID, companyID)
+	}
 	payload := []peopleDeleteProfilePayload{
 		{
 			Token:       a.token,
@@ -447,126 +543,198 @@ func (a *ApiClient) PeopleDeleteProfile(ctx context.Context, distinctID string, 
 }
 
 type groupSetPropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Set      map[string]any `json:"$set"`
+	Token     string         `json:"$token"`
+	GroupKey  string         `json:"$group_key"`
+	GroupId   string         `json:"$group_id"`
+	Set       map[string]any `json:"$set"`
+	CompanyID string         `json:"$company_id,omitempty"`
 }
 
 // GroupUpdateProperty calls the Group Update Property API
 // https://developer.mixpanel.com/reference/group-set-property
+//
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+	companyID, err := a.groupCompanyID(groupKey, groupID)
+	if err != nil {
+		return err
+	}
+	return a.groupSet(ctx, groupKey, groupID, set, companyID)
+}
+
+func (a *ApiClient) groupSet(ctx context.Context, groupKey, groupID string, set map[string]any, companyID string) error {
 	payload := []groupSetPropertyPayload{
 		{
-			Token:    a.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Set:      set,
+			Token:     a.token,
+			GroupKey:  groupKey,
+			GroupId:   groupID,
+			Set:       set,
+			CompanyID: companyID,
 		},
 	}
 	return a.doPeopleRequest(ctx, payload, groupSetUrl)
 }
 
 type groupSetOncePropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	SetOnce  map[string]any `json:"$set_once"`
+	Token     string         `json:"$token"`
+	GroupKey  string         `json:"$group_key"`
+	GroupId   string         `json:"$group_id"`
+	SetOnce   map[string]any `json:"$set_once"`
+	CompanyID string         `json:"$company_id,omitempty"`
 }
 
 // GroupSetOnce calls the Group Set Property Once API
 // https://developer.mixpanel.com/reference/group-set-property-once
+//
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
+	companyID, err := a.groupCompanyID(groupKey, groupID)
+	if err != nil {
+		return err
+	}
+	return a.groupSetOnce(ctx, groupKey, groupID, set, companyID)
+}
+
+func (a *ApiClient) groupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any, companyID string) error {
 	payload := []groupSetOncePropertyPayload{
 		{
-			Token:    a.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			SetOnce:  set,
+			Token:     a.token,
+			GroupKey:  groupKey,
+			GroupId:   groupID,
+			SetOnce:   set,
+			CompanyID: companyID,
 		},
 	}
 	return a.doPeopleRequest(ctx, payload, groupsSetOnceUrl)
 }
 
 type groupDeletePropertyPayload struct {
-	Token    string   `json:"$token"`
-	GroupKey string   `json:"$group_key"`
-	GroupId  string   `json:"$group_id"`
-	Unset    []string `json:"$unset"`
+	Token     string   `json:"$token"`
+	GroupKey  string   `json:"$group_key"`
+	GroupId   string   `json:"$group_id"`
+	Unset     []string `json:"$unset"`
+	CompanyID string   `json:"$company_id,omitempty"`
 }
 
 // GroupDeleteProperty calls the group delete property API
 // https://developer.mixpanel.com/reference/group-delete-property
+//
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
+	companyID, err := a.groupCompanyID(groupKey, groupID)
+	if err != nil {
+		return err
+	}
+	return a.groupDeleteProperty(ctx, groupKey, groupID, unset, companyID)
+}
+
+func (a *ApiClient) groupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string, companyID string) error {
 	payload := []groupDeletePropertyPayload{
 		{
-			Token:    a.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Unset:    unset,
+			Token:     a.token,
+			GroupKey:  groupKey,
+			GroupId:   groupID,
+			Unset:     unset,
+			CompanyID: companyID,
 		},
 	}
 	return a.doPeopleRequest(ctx, payload, groupsDeletePropertyUrl)
 }
 
 type groupRemoveListPropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Remove   map[string]any `json:"$remove"`
+	Token     string         `json:"$token"`
+	GroupKey  string         `json:"$group_key"`
+	GroupId   string         `json:"$group_id"`
+	Remove    map[string]any `json:"$remove"`
+	CompanyID string         `json:"$company_id,omitempty"`
 }
 
 // GroupRemoveListProperty calls the Groups Remove from List Property API
 // https://developer.mixpanel.com/reference/group-remove-from-list-property
+//
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
+	companyID, err := a.groupCompanyID(groupKey, groupID)
+	if err != nil {
+		return err
+	}
+	return a.groupRemoveListProperty(ctx, groupKey, groupID, remove, companyID)
+}
+
+func (a *ApiClient) groupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any, companyID string) error {
 	payload := []groupRemoveListPropertyPayload{
 		{
-			Token:    a.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Remove:   remove,
+			Token:     a.token,
+			GroupKey:  groupKey,
+			GroupId:   groupID,
+			Remove:    remove,
+			CompanyID: companyID,
 		},
 	}
 	return a.doPeopleRequest(ctx, payload, groupsRemoveFromListPropertyUrl)
 }
 
 type groupUnionListPropertyPayload struct {
-	Token    string         `json:"$token"`
-	GroupKey string         `json:"$group_key"`
-	GroupId  string         `json:"$group_id"`
-	Union    map[string]any `json:"$union"`
+	Token     string         `json:"$token"`
+	GroupKey  string         `json:"$group_key"`
+	GroupId   string         `json:"$group_id"`
+	Union     map[string]any `json:"$union"`
+	CompanyID string         `json:"$company_id,omitempty"`
 }
 
 // GroupUnionListProperty calls the Groups Remove from Union Property API
 // https://developer.mixpanel.com/reference/group-union
+//
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
+	companyID, err := a.groupCompanyID(groupKey, groupID)
+	if err != nil {
+		return err
+	}
+	return a.groupUnionListProperty(ctx, groupKey, groupID, union, companyID)
+}
+
+func (a *ApiClient) groupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any, companyID string) error {
 	payload := []groupUnionListPropertyPayload{
 		{
-			Token:    a.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Union:    union,
+			Token:     a.token,
+			GroupKey:  groupKey,
+			GroupId:   groupID,
+			Union:     union,
+			CompanyID: companyID,
 		},
 	}
 	return a.doPeopleRequest(ctx, payload, groupsUnionListPropertyUrl)
 }
 
 type groupDeletePayload struct {
-	Token    string `json:"$token"`
-	GroupKey string `json:"$group_key"`
-	GroupId  string `json:"$group_id"`
-	Delete   string `json:"$delete"`
+	Token     string `json:"$token"`
+	GroupKey  string `json:"$group_key"`
+	GroupId   string `json:"$group_id"`
+	Delete    string `json:"$delete"`
+	CompanyID string `json:"$company_id,omitempty"`
 }
 
 // GroupDelete calls the Groups Delete API
 // https://developer.mixpanel.com/reference/delete-group
+//
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupDelete(ctx context.Context, groupKey, groupID string) error {
+	companyID, err := a.groupCompanyID(groupKey, groupID)
+	if err != nil {
+		return err
+	}
+	return a.groupDelete(ctx, groupKey, groupID, companyID)
+}
+
+func (a *ApiClient) groupDelete(ctx context.Context, groupKey, groupID string, companyID string) error {
 	payload := []groupDeletePayload{
 		{
-			Token:    a.token,
-			GroupKey: groupKey,
-			GroupId:  groupID,
-			Delete:   "null",
+			Token:     a.token,
+			GroupKey:  groupKey,
+			GroupId:   groupID,
+			Delete:    "null",
+			CompanyID: companyID,
 		},
 	}
 

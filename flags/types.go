@@ -16,6 +16,9 @@ const (
 	defaultPollingInterval  = 60 * time.Second
 )
 
+// Tracker sends a flag exposure event. On a hierarchical groups provider whose context has no
+// distinct_id, distinctID is "" and the event is attributed by the $user_id and $company_id in
+// properties instead; the tracker should then send no distinct_id at all.
 type Tracker func(distinctID string, eventName string, properties map[string]any)
 
 type FlagContext map[string]any
@@ -28,6 +31,11 @@ type FlagsConfig struct {
 	// evaluation does not block on the /track round trip. nil keeps the
 	// existing inline behavior. Typical implementation: `func(send func()) { go send() }`.
 	ExposureExecutor func(send func())
+	// HierarchicalGroups marks the project as using hierarchical groups. Exposure events are
+	// then attributed by the context's $company_id (and $user_id when present) as well as by
+	// distinct_id. It does not change evaluation. Providers created by mixpanel.NewApiClient
+	// inherit the client's HierarchicalGroups option.
+	HierarchicalGroups bool
 }
 
 type LocalFlagsConfig struct {
@@ -146,6 +154,12 @@ type ExperimentationFlag struct {
 	ExperimentID       *string `json:"experiment_id,omitempty"`
 	IsExperimentActive *bool   `json:"is_experiment_active,omitempty"`
 	HashSalt           *string `json:"hash_salt,omitempty"`
+	// ContextTemplate, when the service publishes one, says how to build the assignment key from
+	// other context properties when the context has no Context property, for example
+	// "$company:{$company_id}|$user:{$user_id}". Empty when there is none.
+	ContextTemplate string `json:"context_template,omitempty"`
+	// ContextTemplateVersion is the template's format version; 0 (absent) means 1.
+	ContextTemplateVersion int `json:"context_template_version,omitempty"`
 }
 
 type experimentationFlagsResponse struct {

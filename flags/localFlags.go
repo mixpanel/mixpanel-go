@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -48,13 +49,14 @@ func NewLocalFeatureFlagsProvider(token string, version string, config LocalFlag
 	}
 	provider := &LocalFeatureFlagsProvider{
 		featureFlagsProvider: featureFlagsProvider{
-			token:            token,
-			apiHost:          config.APIHost,
-			version:          version,
-			evaluationMode:   "local",
-			tracker:          tracker,
-			client:           client,
-			exposureExecutor: config.ExposureExecutor,
+			token:              token,
+			apiHost:            config.APIHost,
+			version:            version,
+			evaluationMode:     "local",
+			tracker:            tracker,
+			client:             client,
+			exposureExecutor:   config.ExposureExecutor,
+			hierarchicalGroups: config.HierarchicalGroups,
 		},
 		config:         config,
 		stopPolling:    make(chan struct{}),
@@ -141,13 +143,25 @@ func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey stri
 	}
 
 	contextValue, ok := flagContext[flag.Context]
+	// Where the caller did not send the assignment key, the service may publish a template saying
+	// how to build it from properties they did send. This SDK never composes an identity itself.
+	var templateDistinctID *string
+	if (!ok || contextValue == nil) && flag.ContextTemplate != "" {
+		var resolved string
+		resolved, ok = applyContextTemplate(flag.ContextTemplate, flagContext)
+		contextValue = resolved
+		if ok && flag.Context == "distinct_id" {
+			// Test users are keyed by distinct id, which is exactly what the template built.
+			templateDistinctID = &resolved
+		}
+	}
 	if !ok {
 		return fallbackVariant.AsFallback(FallbackReasonMissingContextKey), nil
 	}
 
 	var selectedVariant *SelectedVariant
 
-	if testVariant := p.getVariantOverrideForTestUser(flag, flagContext); testVariant != nil {
+	if testVariant := p.getVariantOverrideForTestUser(flag, flagContext, templateDistinctID); testVariant != nil {
 		selectedVariant = testVariant
 	} else {
 		rollout, err := p.getAssignedRollout(flag, contextValue, flagContext)
@@ -198,12 +212,16 @@ func (p *LocalFeatureFlagsProvider) TrackExposureEvent(ctx context.Context, flag
 	p.trackExposure(flagKey, variant, flagContext, nil)
 }
 
-func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *ExperimentationFlag, flagContext FlagContext) *SelectedVariant {
+// templateDistinctID is the distinct id resolved from the flag's context template, or nil.
+func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *ExperimentationFlag, flagContext FlagContext, templateDistinctID *string) *SelectedVariant {
 	if flag.Ruleset.Test == nil || flag.Ruleset.Test.Users == nil {
 		return nil
 	}
 
 	distinctID, ok := flagContext["distinct_id"].(string)
+	if !ok && templateDistinctID != nil {
+		distinctID, ok = *templateDistinctID, true
+	}
 	if !ok {
 		return nil
 	}
@@ -354,6 +372,9 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 	flags := make(map[string]*ExperimentationFlag)
 	for i := range result.Flags {
 		flag := &result.Flags[i]
+		if !isUsableDefinition(flag) {
+			continue
+		}
 		sort.Slice(flag.Ruleset.Variants, func(a, b int) bool {
 			return flag.Ruleset.Variants[a].Key < flag.Ruleset.Variants[b].Key
 		})
@@ -364,4 +385,58 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 	p.areFlagsReady.Store(true)
 
 	return nil
+}
+
+// supportedContextTemplateVersion is the highest context_template_version this SDK can apply.
+const supportedContextTemplateVersion = 1
+
+// contextPlaceholder matches a {property} placeholder in a context template.
+var contextPlaceholder = regexp.MustCompile(`\{([^}]+)\}`)
+
+// anyPlaceholder also matches an empty {} placeholder, so that one can be rejected.
+var anyPlaceholder = regexp.MustCompile(`\{([^}]*)\}`)
+
+// isUsableDefinition reports whether a flag's context template can be applied, logging why a
+// definition is dropped. A dropped flag behaves as not found rather than assigning a variant the
+// service never chose.
+func isUsableDefinition(flag *ExperimentationFlag) bool {
+	if flag.ContextTemplateVersion > supportedContextTemplateVersion {
+		log.Printf("Dropping flag '%s': context_template_version %d is newer than this SDK understands (%d). "+
+			"Evaluate it remotely, or upgrade the SDK.", flag.Key, flag.ContextTemplateVersion, supportedContextTemplateVersion)
+		return false
+	}
+	if flag.ContextTemplate == "" {
+		return true
+	}
+	matches := anyPlaceholder.FindAllStringSubmatch(flag.ContextTemplate, -1)
+	usable := len(matches) > 0
+	for _, m := range matches {
+		if strings.TrimSpace(m[1]) == "" {
+			usable = false
+		}
+	}
+	if !usable {
+		log.Printf("Dropping flag '%s': context_template '%s' has no usable placeholders.", flag.Key, flag.ContextTemplate)
+	}
+	return usable
+}
+
+// applyContextTemplate fills each placeholder of a context template with the context value of the
+// same name. ok is false when any of them is missing, nil or empty.
+func applyContextTemplate(template string, flagContext FlagContext) (string, bool) {
+	ok := true
+	resolved := contextPlaceholder.ReplaceAllStringFunc(template, func(placeholder string) string {
+		name := placeholder[1 : len(placeholder)-1]
+		value, present := flagContext[name]
+		if !present || value == nil {
+			ok = false
+			return ""
+		}
+		s := fmt.Sprintf("%v", value)
+		if s == "" {
+			ok = false
+		}
+		return s
+	})
+	return resolved, ok
 }

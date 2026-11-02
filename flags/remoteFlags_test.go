@@ -490,3 +490,76 @@ func TestRemoteFeatureFlagsProvider_RequestFormat(t *testing.T) {
 		require.Equal(t, specialID, decoded["distinct_id"])
 	})
 }
+
+func TestRemoteFeatureFlagsProvider_HierarchicalGroups(t *testing.T) {
+	setup := func(t *testing.T, hierarchicalGroups bool) (*RemoteFeatureFlagsProvider, *[]trackedExposure, **http.Request) {
+		t.Helper()
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+
+		var captured *http.Request
+		variantKey := "variant-a"
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			func(req *http.Request) (*http.Response, error) {
+				captured = req
+				return httpmock.NewJsonResponse(200, remoteFlagsResponse{
+					Code:  200,
+					Flags: map[string]*SelectedVariant{"test-flag": {VariantKey: &variantKey, VariantValue: "value-a"}},
+				})
+			})
+
+		config := DefaultRemoteFlagsConfig()
+		config.HierarchicalGroups = hierarchicalGroups
+		var exposures []trackedExposure
+		tracker := func(distinctID string, eventName string, props map[string]any) {
+			exposures = append(exposures, trackedExposure{distinctID: distinctID, props: props})
+		}
+		return NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker), &exposures, &captured
+	}
+
+	t.Run("context is forwarded and exposure carries user and company", func(t *testing.T) {
+		provider, exposures, captured := setup(t, true)
+
+		result, err := provider.GetVariantValue(context.Background(), "test-flag", "fallback",
+			FlagContext{"$user_id": "user-123", "$company_id": "acme"})
+		require.NoError(t, err)
+		require.Equal(t, "value-a", result)
+
+		var sent FlagContext
+		require.NoError(t, json.Unmarshal([]byte((*captured).URL.Query().Get("context")), &sent))
+		require.Equal(t, FlagContext{"$user_id": "user-123", "$company_id": "acme"}, sent)
+
+		require.Len(t, *exposures, 1)
+		exposure := (*exposures)[0]
+		require.Equal(t, "", exposure.distinctID)
+		require.Equal(t, "user-123", exposure.props["$user_id"])
+		require.Equal(t, "acme", exposure.props["$company_id"])
+		require.NotContains(t, exposure.props, "distinct_id")
+		require.Equal(t, "remote", exposure.props["Flag evaluation mode"])
+	})
+
+	t.Run("drops exposure without company or distinct id", func(t *testing.T) {
+		provider, exposures, _ := setup(t, true)
+
+		_, err := provider.GetVariantValue(context.Background(), "test-flag", "fallback", FlagContext{"$user_id": "user-123"})
+		require.NoError(t, err)
+		require.Empty(t, *exposures)
+	})
+
+	t.Run("legacy project ignores company and user", func(t *testing.T) {
+		provider, exposures, _ := setup(t, false)
+
+		_, err := provider.GetVariantValue(context.Background(), "test-flag", "fallback",
+			FlagContext{"$user_id": "user-123", "$company_id": "acme"})
+		require.NoError(t, err)
+		require.Empty(t, *exposures)
+
+		_, err = provider.GetVariantValue(context.Background(), "test-flag", "fallback",
+			FlagContext{"distinct_id": "user-123", "$user_id": "user-123", "$company_id": "acme"})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "user-123", (*exposures)[0].distinctID)
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+		require.NotContains(t, (*exposures)[0].props, "$company_id")
+	})
+}
