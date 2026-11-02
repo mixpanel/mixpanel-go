@@ -32,7 +32,7 @@ var (
 
 	// ErrUnsupportedHierarchicalOperation is returned on a hierarchical groups client for people
 	// operations that have no /groups equivalent, such as PeopleIncrement and PeopleAppendListProperty,
-	// and for Alias.
+	// and for Alias and Merge.
 	ErrUnsupportedHierarchicalOperation = errors.New("operation not supported for hierarchical groups")
 
 	// ErrCompanyRequired is returned on a hierarchical groups client for a group profile update

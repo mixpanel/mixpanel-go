@@ -524,6 +524,16 @@ func TestScenarioAliasUnsupported(t *testing.T) {
 	require.Empty(t, *requests)
 }
 
+func TestScenarioMergeUnsupported(t *testing.T) {
+	// A user is identified by company and user id, so there is nothing to merge.
+	requests := captureRequests(t)
+
+	err := hgClient().Merge(context.Background(), scenarioUserID, scenarioDeviceID)
+
+	require.ErrorIs(t, err, ErrUnsupportedHierarchicalOperation)
+	require.Empty(t, *requests)
+}
+
 // Without hierarchical groups
 
 func TestScenarioTrackWithDistinctID(t *testing.T) {

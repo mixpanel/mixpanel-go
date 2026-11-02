@@ -53,7 +53,13 @@ type mergeProperties struct {
 
 // https://developer.mixpanel.com/reference/identity-merge
 // must provide a service account
+//
+// Returns ErrUnsupportedHierarchicalOperation on a hierarchical groups client.
 func (a *ApiClient) Merge(ctx context.Context, distinctID1, distinctID2 string) error {
+	if a.hierarchicalGroups {
+		return fmt.Errorf("%w: Merge is not supported for hierarchical groups projects, which identify a user by "+
+			"company and user id", ErrUnsupportedHierarchicalOperation)
+	}
 	if a.serviceAccount == nil {
 		return errors.New("service account is required for the merge api")
 	}
