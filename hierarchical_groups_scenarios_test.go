@@ -3,13 +3,9 @@ package mixpanel
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/url"
 	"sort"
 	"testing"
 
-	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -519,30 +515,13 @@ func TestScenarioCompanyIdentityWithoutHierarchicalGroups(t *testing.T) {
 }
 
 func TestScenarioAliasUnsupported(t *testing.T) {
-	// Alias is not checked against hierarchical groups; it is sent as on any other client.
-	captureRequests(t)
-	var bodies [][]byte
-	httpmock.RegisterResponder(http.MethodPost, `=~/track\z`, func(req *http.Request) (*http.Response, error) {
-		body, err := io.ReadAll(req.Body)
-		require.NoError(t, err)
-		require.Equal(t, "identity-create-alias", req.URL.Fragment)
-		bodies = append(bodies, body)
-		return httpmock.NewStringResponse(http.StatusOK, "1"), nil
-	})
+	// A user is identified by company and user id, so there is nothing to alias.
+	requests := captureRequests(t)
 
-	require.NoError(t, hgClient().Alias(context.Background(), "alias_id", scenarioUserID))
+	err := hgClient().Alias(context.Background(), "alias_id", scenarioUserID)
 
-	require.Len(t, bodies, 1)
-	form, err := url.ParseQuery(string(bodies[0]))
-	require.NoError(t, err)
-	var payload map[string]any
-	require.NoError(t, json.Unmarshal([]byte(form.Get("data")), &payload))
-	require.Equal(t, "$create_alias", payload["event"])
-	props, ok := payload["properties"].(map[string]any)
-	require.True(t, ok)
-	requireKeys(t, props, "distinct_id", "alias", "token")
-	require.Equal(t, scenarioUserID, props["distinct_id"])
-	require.Equal(t, "alias_id", props["alias"])
+	require.ErrorIs(t, err, ErrUnsupportedHierarchicalOperation)
+	require.Empty(t, *requests)
 }
 
 // Without hierarchical groups

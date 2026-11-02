@@ -31,7 +31,8 @@ var (
 	ErrInvalidIdentity = errors.New("invalid identity")
 
 	// ErrUnsupportedHierarchicalOperation is returned on a hierarchical groups client for people
-	// operations that have no /groups equivalent, such as PeopleIncrement and PeopleAppendListProperty.
+	// operations that have no /groups equivalent, such as PeopleIncrement and PeopleAppendListProperty,
+	// and for Alias.
 	ErrUnsupportedHierarchicalOperation = errors.New("operation not supported for hierarchical groups")
 
 	// ErrCompanyRequired is returned on a hierarchical groups client for a group profile update

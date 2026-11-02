@@ -3,6 +3,7 @@ package mixpanel
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 const (
@@ -21,7 +22,14 @@ type aliasProperties struct {
 }
 
 // https://developer.mixpanel.com/reference/identity-create-alias
+//
+// Returns ErrUnsupportedHierarchicalOperation on a hierarchical groups client.
 func (a *ApiClient) Alias(ctx context.Context, aliasID, distinctID string) error {
+	if a.hierarchicalGroups {
+		return fmt.Errorf("%w: Alias is not supported for hierarchical groups projects, which identify a user by "+
+			"company and user id. Track with NewIdentityEvent and a MixpanelIdentity instead",
+			ErrUnsupportedHierarchicalOperation)
+	}
 	payload := &aliasPayload{
 		Event: "$create_alias",
 		Properties: aliasProperties{
