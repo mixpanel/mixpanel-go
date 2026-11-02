@@ -814,7 +814,7 @@ func TestHierarchicalGroupsFlagExposure(t *testing.T) {
 				requests := captureRequests(t)
 				httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
 					httpmock.NewStringResponder(200, `{"flags":[{"id":"1","key":"test-flag","context":"distinct_id",
-						"context_template":"$company:{$company_id}|$user:{$user_id}",
+						"context_value_template":"$company:{$company_id}|$user:{$user_id}",
 						"ruleset":{"variants":[{"key":"on","value":true,"split":1}],"rollout":[{"rollout_percentage":1}]}}]}`))
 				client := NewApiClient("token", options...)
 				require.NoError(t, client.LocalFlags.StartPollingForDefinitions(context.Background()))

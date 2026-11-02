@@ -850,7 +850,7 @@ func newDefinitionsProvider(t *testing.T, hierarchicalGroups bool, definitions .
 }
 
 // flagDefinition returns a definition with one fully rolled out variant. extra is spliced into
-// the JSON object, e.g. `"context_template":"..."`.
+// the JSON object, e.g. `"context_value_template":"..."`.
 func flagDefinition(key, contextProperty, extra string) string {
 	if extra != "" {
 		extra = "," + extra
@@ -860,218 +860,216 @@ func flagDefinition(key, contextProperty, extra string) string {
 }
 
 func templateField(template string) string {
-	return `"context_template":"` + template + `"`
+	return `"context_value_template":"` + template + `"`
 }
 
 // hgTestDefinition is the shared cross-SDK key test definition.
 const hgTestDefinition = `{"id":"id-hg","key":"hg-test","status":"active","project_id":1,"context":"distinct_id",
-	"context_template":"$company:{$company_id}|$user:{$user_id}",
+	"context_value_template":"$company:{$company_id}|$user:{$user_id}",
 	"hash_salt":"880dc3e584b4452fb769808ca18dc9a6",
 	"ruleset":{"variants":[{"key":"On","value":true,"split":1},{"key":"Off","value":false,"split":0}],
 		"rollout":[{"rollout_percentage":0.5,"variant_splits":{"Off":0,"On":1}}],
 		"test":{"users":{}}}}`
 
-func TestLocalFeatureFlagsProvider_ContextTemplate(t *testing.T) {
+// hgTestSalt is the rollout salt of hgTestDefinition's first rollout for a flag with the given key.
+func hgTestSalt(key string) string {
+	return key + "880dc3e584b4452fb769808ca18dc9a60"
+}
+
+// hgDefinition returns hgTestDefinition under another key, context property and template.
+func hgDefinition(key, contextProperty, template string) string {
+	definition := strings.Replace(hgTestDefinition, `"key":"hg-test"`, `"key":"`+key+`"`, 1)
+	definition = strings.Replace(definition, `"context":"distinct_id"`, `"context":"`+contextProperty+`"`, 1)
+	field := ""
+	if template != "" {
+		field = templateField(template) + ","
+	}
+	return strings.Replace(definition, templateField(hgTemplate)+",", field, 1)
+}
+
+// The templates the service sends for each context property.
+var hgTemplates = map[string]string{
+	"distinct_id": "$company:{$company_id}|$user:{$user_id}",
+	"device_id":   "{device_id}",
+	"$user_id":    "$company:{$company_id}|$user:{$user_id}",
+	"$company_id": "$company:{$company_id}",
+	"department":  "$company:{$company_id}|department:{department}",
+}
+
+func TestResolveAssignmentKey(t *testing.T) {
+	hgContext := FlagContext{"distinct_id": "user_123", "device_id": "device_abc", "$user_id": "user_123",
+		"$company_id": "company_123", "department": "finance"}
+	nonHGContext := FlagContext{"distinct_id": "user_123", "device_id": "device_abc", "$user_id": "user_123",
+		"department": "finance"}
+
+	tests := []struct {
+		name            string
+		contextProperty string
+		template        string
+		flagContext     FlagContext
+		expectedKey     any
+		expectedOK      bool
+	}{
+		{"distinct_id template", "distinct_id", hgTemplates["distinct_id"], hgContext, "$company:company_123|$user:user_123", true},
+		{"device_id template", "device_id", hgTemplates["device_id"], hgContext, "device_abc", true},
+		{"$user_id template", "$user_id", hgTemplates["$user_id"], hgContext, "$company:company_123|$user:user_123", true},
+		{"$company_id template", "$company_id", hgTemplates["$company_id"], hgContext, "$company:company_123", true},
+		{"department template", "department", hgTemplates["department"], hgContext, "$company:company_123|department:finance", true},
+
+		{"non-HG distinct_id uses raw", "distinct_id", hgTemplates["distinct_id"], nonHGContext, "user_123", true},
+		{"non-HG device_id uses raw", "device_id", hgTemplates["device_id"], nonHGContext, "device_abc", true},
+		{"non-HG $user_id uses raw", "$user_id", hgTemplates["$user_id"], nonHGContext, "user_123", true},
+		{"non-HG $company_id is missing", "$company_id", hgTemplates["$company_id"], nonHGContext, nil, false},
+		{"non-HG department uses raw", "department", hgTemplates["department"], nonHGContext, "finance", true},
+
+		{"absent placeholder falls back to raw", "distinct_id", hgTemplates["distinct_id"],
+			FlagContext{"distinct_id": "raw", "$company_id": "c1"}, "raw", true},
+		{"nil placeholder falls back to raw", "distinct_id", hgTemplates["distinct_id"],
+			FlagContext{"distinct_id": "raw", "$company_id": "c1", "$user_id": nil}, "raw", true},
+		{"empty placeholder value is used", "distinct_id", hgTemplates["distinct_id"],
+			FlagContext{"distinct_id": "raw", "$company_id": "", "$user_id": "u1"}, "$company:|$user:u1", true},
+		{"no template uses raw", "distinct_id", "", hgContext, "user_123", true},
+		{"no template keeps a present nil raw value", "distinct_id", "", FlagContext{"distinct_id": nil}, nil, true},
+		{"raw also missing", "distinct_id", hgTemplates["distinct_id"], FlagContext{"$company_id": "c1"}, nil, false},
+		{"no template and raw missing", "distinct_id", "", FlagContext{"$company_id": "c1", "$user_id": "u1"}, nil, false},
+		{"literal text outside braces", "account", "org/{a}-{b}!",
+			FlagContext{"account": "raw", "a": "x", "b": 2}, "org/x-2!", true},
+		{"template without placeholders is literal", "account", "fixed", FlagContext{}, "fixed", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := &ExperimentationFlag{Context: tt.contextProperty, ContextValueTemplate: tt.template}
+			key, ok := resolveAssignmentKey(flag, tt.flagContext)
+			require.Equal(t, tt.expectedOK, ok)
+			require.Equal(t, tt.expectedKey, key)
+		})
+	}
+}
+
+func TestLocalFeatureFlagsProvider_ContextValueTemplate(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("template context gets the same variant as the distinct id it builds", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, hgTestDefinition)
+	t.Run("rollout hashes on the resolved key", func(t *testing.T) {
+		for property, template := range hgTemplates {
+			t.Run(property, func(t *testing.T) {
+				provider, _ := newDefinitionsProvider(t, true, hgDefinition("flag", property, template))
 
-		var on, off int
+				var on, off int
+				for i := 0; i < 50; i++ {
+					flagCtx := FlagContext{"distinct_id": "user_123", "device_id": fmt.Sprintf("device_%d", i), "$user_id": "user_123",
+						"$company_id": fmt.Sprintf("company_%d", i), "department": "finance"}
+					expectedKey, ok := resolveAssignmentKey(&ExperimentationFlag{Context: property, ContextValueTemplate: template}, flagCtx)
+					require.True(t, ok)
+
+					variant, err := provider.GetVariant(ctx, "flag", SelectedVariant{}, flagCtx, false)
+					require.NoError(t, err)
+					expectedIn := normalizedHash(expectedKey.(string), hgTestSalt("flag")) < 0.5
+					require.Equal(t, expectedIn, variant.VariantKey != nil, "key %s", expectedKey)
+					if expectedIn {
+						on++
+					} else {
+						off++
+					}
+				}
+				// A 50% rollout over 50 keys exercises both sides of the hash.
+				require.Positive(t, on)
+				require.Positive(t, off)
+			})
+		}
+	})
+
+	t.Run("non-HG context gets the same variant as without a template", func(t *testing.T) {
+		templated, _ := newDefinitionsProvider(t, false, hgTestDefinition)
+		var results []SelectedVariant
 		for i := 0; i < 50; i++ {
-			userID := fmt.Sprintf("u%d", i)
-			viaTemplate, err := provider.GetVariant(ctx, "hg-test", SelectedVariant{}, FlagContext{"$company_id": "acme", "$user_id": userID}, false)
+			variant, err := templated.GetVariant(ctx, "hg-test", SelectedVariant{},
+				FlagContext{"distinct_id": fmt.Sprintf("user_%d", i), "$user_id": fmt.Sprintf("user_%d", i)}, false)
 			require.NoError(t, err)
-			viaDistinctID, err := provider.GetVariant(ctx, "hg-test", SelectedVariant{}, FlagContext{"distinct_id": "$company:acme|$user:" + userID}, false)
-			require.NoError(t, err)
+			results = append(results, variant)
+		}
 
-			require.Equal(t, viaDistinctID, viaTemplate, "user %s", userID)
-			if viaTemplate.VariantKey != nil {
+		// The same definition without a template is how main reads it.
+		plain, _ := newDefinitionsProvider(t, false, hgDefinition("hg-test", "distinct_id", ""))
+		var on int
+		for i := 0; i < 50; i++ {
+			distinctID := fmt.Sprintf("user_%d", i)
+			variant, err := plain.GetVariant(ctx, "hg-test", SelectedVariant{},
+				FlagContext{"distinct_id": distinctID, "$user_id": distinctID}, false)
+			require.NoError(t, err)
+			require.Equal(t, variant, results[i], distinctID)
+			require.Equal(t, normalizedHash(distinctID, hgTestSalt("hg-test")) < 0.5, variant.VariantKey != nil, distinctID)
+			if variant.VariantKey != nil {
 				on++
-			} else {
-				off++
 			}
 		}
-		// A 50% rollout over 50 users exercises both sides of the hash.
 		require.Positive(t, on)
-		require.Positive(t, off)
+		require.Less(t, on, 50)
 	})
 
-	t.Run("template needs every placeholder", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, hgTestDefinition)
+	t.Run("raw value also missing returns the fallback", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField(hgTemplates["distinct_id"])))
 
-		for _, flagCtx := range []FlagContext{
-			{"$user_id": "u1"},
-			{"$company_id": "acme"},
-			{"$company_id": "acme", "$user_id": ""},
-			{"$company_id": nil, "$user_id": "u1"},
-		} {
-			variant, err := provider.GetVariant(ctx, "hg-test", SelectedVariant{}, flagCtx, false)
-			require.NoError(t, err)
-			require.Equal(t, FallbackReasonMissingContextKey, variant.FallbackReason, "%v", flagCtx)
-		}
-	})
-
-	t.Run("template resolves the assignment key", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField(hgTemplate)))
-
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
-		require.NoError(t, err)
-		require.Equal(t, "value-a", result)
-	})
-
-	t.Run("template is applied without hierarchical groups", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, false, flagDefinition("flag", "distinct_id", templateField(hgTemplate)))
-
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
-		require.NoError(t, err)
-		require.Equal(t, "value-a", result)
-	})
-
-	t.Run("context property is used as sent over the template", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, hgTestDefinition)
-
-		for i := 0; i < 50; i++ {
-			userID := fmt.Sprintf("u%d", i)
-			direct, err := provider.GetVariant(ctx, "hg-test", SelectedVariant{}, FlagContext{"distinct_id": userID}, false)
-			require.NoError(t, err)
-			mixed, err := provider.GetVariant(ctx, "hg-test", SelectedVariant{},
-				FlagContext{"distinct_id": userID, "$company_id": "acme", "$user_id": "other"}, false)
-			require.NoError(t, err)
-			require.Equal(t, direct, mixed, "user %s", userID)
-		}
-	})
-
-	t.Run("hierarchical context without template or distinct id falls back", func(t *testing.T) {
-		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
-
-		variant, err := provider.GetVariant(ctx, "flag", SelectedVariant{}, FlagContext{"$company_id": "acme", "$user_id": "user-123"}, true)
+		variant, err := provider.GetVariant(ctx, "flag", SelectedVariant{}, FlagContext{"$company_id": "acme"}, true)
 		require.NoError(t, err)
 		require.Equal(t, FallbackReasonMissingContextKey, variant.FallbackReason)
 		require.Empty(t, *exposures)
 	})
 
-	t.Run("group and device flags hash on the raw context value", func(t *testing.T) {
-		for _, property := range []string{"department", "device_id"} {
-			provider, _ := newDefinitionsProvider(t, true, hgTestDefinition,
-				strings.Replace(strings.Replace(hgTestDefinition, `"context":"distinct_id"`, `"context":"`+property+`"`, 1), `"key":"hg-test"`, `"key":"other"`, 1))
+	t.Run("template resolves without a raw value", func(t *testing.T) {
+		provider, _ := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField(hgTemplates["distinct_id"])))
 
-			for i := 0; i < 50; i++ {
-				value := fmt.Sprintf("v%d", i)
-				// Same key and salt is not possible across two flags, so compare against a
-				// distinct_id flag hashing the same raw value under the same salt.
-				onProperty, err := provider.GetVariant(ctx, "other", SelectedVariant{},
-					FlagContext{property: value, "$company_id": "acme", "$user_id": "u1"}, false)
-				require.NoError(t, err)
-				expectedIn := normalizedHash(value, "other880dc3e584b4452fb769808ca18dc9a60") < 0.5
-				require.Equal(t, expectedIn, onProperty.VariantKey != nil, "%s=%s", property, value)
-			}
-		}
-	})
-
-	t.Run("hierarchical project evaluates on distinct id alone", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
-
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"distinct_id": "user-123"})
+		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
 		require.NoError(t, err)
 		require.Equal(t, "value-a", result)
 	})
 }
 
-func TestLocalFeatureFlagsProvider_ContextTemplateDefinitions(t *testing.T) {
+func TestLocalFeatureFlagsProvider_ContextValueTemplateTestUsers(t *testing.T) {
 	ctx := context.Background()
-	hgContext := FlagContext{"distinct_id": "user-123", "$company_id": "acme", "$user_id": "user-123"}
-
-	for name, extra := range map[string]string{
-		"newer template version":     `"context_template_version":99,` + templateField(hgTemplate),
-		"newer version, no template": `"context_template_version":2`,
-		"no placeholders":            templateField("$company:no-placeholders"),
-		"empty placeholder":          templateField("$company:{}|$user:{$user_id}"),
-		"blank placeholder":          templateField("$company:{  }|$user:{$user_id}"),
-	} {
-		t.Run("drops definition with "+name, func(t *testing.T) {
-			provider, _ := newDefinitionsProvider(t, true,
-				flagDefinition("good-flag", "distinct_id", ""),
-				flagDefinition("flag", "distinct_id", extra))
-
-			variant, err := provider.GetVariant(ctx, "flag", SelectedVariant{}, hgContext, false)
-			require.NoError(t, err)
-			require.Equal(t, FallbackReasonFlagNotFound, variant.FallbackReason)
-
-			// One unusable definition must not take the rest of the payload with it.
-			result, err := provider.GetVariantValue(ctx, "good-flag", "fallback", hgContext)
-			require.NoError(t, err)
-			require.Equal(t, "value-a", result)
-		})
-	}
-
-	for name, extra := range map[string]string{
-		"version 1":              `"context_template_version":1,` + templateField(hgTemplate),
-		"absent version":         templateField(hgTemplate),
-		"empty template":         templateField(""),
-		"placeholder with space": templateField("{ $company_id }|{$user_id}"),
-	} {
-		t.Run("keeps definition with "+name, func(t *testing.T) {
-			provider, _ := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", extra))
-
-			result, err := provider.GetVariantValue(ctx, "flag", "fallback", hgContext)
-			require.NoError(t, err)
-			require.Equal(t, "value-a", result)
-		})
-	}
-
-	t.Run("placeholder names are used verbatim", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField("{ $company_id }")))
-
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme"})
-		require.NoError(t, err)
-		require.Equal(t, "fallback", result)
-
-		result, err = provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{" $company_id ": "acme"})
-		require.NoError(t, err)
-		require.Equal(t, "value-a", result)
-	})
-}
-
-func TestLocalFeatureFlagsProvider_ContextTemplateTestUsers(t *testing.T) {
-	ctx := context.Background()
-	definition := func(extra string) string {
-		if extra != "" {
-			extra = "," + extra
+	definition := func(contextProperty, template string) string {
+		extra := ""
+		if template != "" {
+			extra = "," + templateField(template)
 		}
-		return `{"id":"id","key":"flag","status":"active","project_id":1,"context":"distinct_id"` + extra + `,
+		return `{"id":"id","key":"flag","status":"active","project_id":1,"context":"` + contextProperty + `"` + extra + `,
 			"ruleset":{"variants":[{"key":"control","value":"control-value","split":1},{"key":"treatment","value":"treatment-value","split":0}],
 				"rollout":[{"rollout_percentage":1}],
-				"test":{"users":{"$company:acme|$user:user-123":"treatment"}}}}`
+				"test":{"users":{"$company:acme|$user:user-123":"treatment","raw-user":"treatment"}}}}`
 	}
 
-	t.Run("override matches the distinct id the template builds", func(t *testing.T) {
-		provider, exposures := newDefinitionsProvider(t, true, definition(templateField(hgTemplate)))
+	tests := []struct {
+		name            string
+		contextProperty string
+		template        string
+		flagContext     FlagContext
+		expected        string
+	}{
+		{"distinct_id flag looks up the resolved key", "distinct_id", hgTemplate,
+			FlagContext{"distinct_id": "other", "$company_id": "acme", "$user_id": "user-123"}, "treatment-value"},
+		{"distinct_id flag ignores the raw distinct id once the template resolves", "distinct_id", hgTemplate,
+			FlagContext{"distinct_id": "raw-user", "$company_id": "acme", "$user_id": "other"}, "control-value"},
+		{"distinct_id flag looks up the raw distinct id when the template does not resolve", "distinct_id", hgTemplate,
+			FlagContext{"distinct_id": "raw-user"}, "treatment-value"},
+		{"distinct_id flag without template looks up the raw distinct id", "distinct_id", "",
+			FlagContext{"distinct_id": "raw-user", "$company_id": "acme", "$user_id": "user-123"}, "treatment-value"},
+		{"other flag looks up the raw distinct id", "account", hgTemplate,
+			FlagContext{"account": "a1", "distinct_id": "raw-user", "$company_id": "acme", "$user_id": "other"}, "treatment-value"},
+		{"other flag does not look up the resolved key", "account", hgTemplate,
+			FlagContext{"account": "a1", "$company_id": "acme", "$user_id": "user-123"}, "control-value"},
+	}
 
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
-		require.NoError(t, err)
-		require.Equal(t, "treatment-value", result)
-		require.Len(t, *exposures, 1)
-		require.Equal(t, true, (*exposures)[0].props["$is_qa_tester"])
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, exposures := newDefinitionsProvider(t, true, definition(tt.contextProperty, tt.template))
 
-	t.Run("override matches distinct id as sent", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true, definition(""))
-
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback",
-			FlagContext{"distinct_id": "$company:acme|$user:user-123", "$company_id": "acme", "$user_id": "user-123"})
-		require.NoError(t, err)
-		require.Equal(t, "treatment-value", result)
-	})
-
-	t.Run("template does not build a distinct id for another context property", func(t *testing.T) {
-		provider, _ := newDefinitionsProvider(t, true,
-			strings.Replace(definition(templateField(hgTemplate)), `"context":"distinct_id"`, `"context":"account"`, 1))
-
-		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
-		require.NoError(t, err)
-		require.Equal(t, "control-value", result)
-	})
+			result, err := provider.GetVariantValue(ctx, "flag", "fallback", tt.flagContext)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, result)
+			require.Len(t, *exposures, 1)
+			require.Equal(t, tt.expected == "treatment-value", (*exposures)[0].props["$is_qa_tester"] == true)
+		})
+	}
 }
 
 func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
@@ -1153,11 +1151,9 @@ func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
 	})
 }
 
-func TestLocalFeatureFlagsProvider_WithoutContextTemplateUnchanged(t *testing.T) {
+func TestLocalFeatureFlagsProvider_WithoutContextValueTemplateUnchanged(t *testing.T) {
 	ctx := context.Background()
-	provider, exposures := newDefinitionsProvider(t, false, hgTestDefinition,
-		strings.Replace(strings.Replace(hgTestDefinition, `"context_template":"$company:{$company_id}|$user:{$user_id}",`, "", 1),
-			`"key":"hg-test"`, `"key":"plain"`, 1))
+	provider, exposures := newDefinitionsProvider(t, false, hgTestDefinition, hgDefinition("plain", "distinct_id", ""))
 
 	t.Run("hashes the distinct id exactly as before", func(t *testing.T) {
 		for i := 0; i < 50; i++ {

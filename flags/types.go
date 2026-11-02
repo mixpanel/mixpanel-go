@@ -154,12 +154,10 @@ type ExperimentationFlag struct {
 	ExperimentID       *string `json:"experiment_id,omitempty"`
 	IsExperimentActive *bool   `json:"is_experiment_active,omitempty"`
 	HashSalt           *string `json:"hash_salt,omitempty"`
-	// ContextTemplate, when the service publishes one, says how to build the assignment key from
-	// other context properties when the context has no Context property, for example
-	// "$company:{$company_id}|$user:{$user_id}". Empty when there is none.
-	ContextTemplate string `json:"context_template,omitempty"`
-	// ContextTemplateVersion is the template's format version; 0 (absent) means 1.
-	ContextTemplateVersion int `json:"context_template_version,omitempty"`
+	// ContextValueTemplate, when the service publishes one, builds the assignment key from context
+	// values, for example "$company:{$company_id}|$user:{$user_id}". When it is empty or any
+	// placeholder is missing from the context, the raw Context property is used instead.
+	ContextValueTemplate string `json:"context_value_template,omitempty"`
 }
 
 type experimentationFlagsResponse struct {
