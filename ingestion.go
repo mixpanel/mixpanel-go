@@ -553,8 +553,7 @@ type groupSetPropertyPayload struct {
 // GroupUpdateProperty calls the Group Update Property API
 // https://developer.mixpanel.com/reference/group-set-property
 //
-// On a hierarchical groups client a $company_id profile is its own company; other groups need a
-// company bound with ForCompany, else it returns ErrCompanyRequired.
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -587,8 +586,7 @@ type groupSetOncePropertyPayload struct {
 // GroupSetOnce calls the Group Set Property Once API
 // https://developer.mixpanel.com/reference/group-set-property-once
 //
-// On a hierarchical groups client a $company_id profile is its own company; other groups need a
-// company bound with ForCompany, else it returns ErrCompanyRequired.
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -621,8 +619,7 @@ type groupDeletePropertyPayload struct {
 // GroupDeleteProperty calls the group delete property API
 // https://developer.mixpanel.com/reference/group-delete-property
 //
-// On a hierarchical groups client a $company_id profile is its own company; other groups need a
-// company bound with ForCompany, else it returns ErrCompanyRequired.
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -655,8 +652,7 @@ type groupRemoveListPropertyPayload struct {
 // GroupRemoveListProperty calls the Groups Remove from List Property API
 // https://developer.mixpanel.com/reference/group-remove-from-list-property
 //
-// On a hierarchical groups client a $company_id profile is its own company; other groups need a
-// company bound with ForCompany, else it returns ErrCompanyRequired.
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -689,8 +685,7 @@ type groupUnionListPropertyPayload struct {
 // GroupUnionListProperty calls the Groups Remove from Union Property API
 // https://developer.mixpanel.com/reference/group-union
 //
-// On a hierarchical groups client a $company_id profile is its own company; other groups need a
-// company bound with ForCompany, else it returns ErrCompanyRequired.
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -723,8 +718,7 @@ type groupDeletePayload struct {
 // GroupDelete calls the Groups Delete API
 // https://developer.mixpanel.com/reference/delete-group
 //
-// On a hierarchical groups client a $company_id profile is its own company; other groups need a
-// company bound with ForCompany, else it returns ErrCompanyRequired.
+// On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
 func (a *ApiClient) GroupDelete(ctx context.Context, groupKey, groupID string) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {

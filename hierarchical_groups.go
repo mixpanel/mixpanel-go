@@ -36,7 +36,7 @@ var (
 	ErrUnsupportedHierarchicalOperation = errors.New("operation not supported for hierarchical groups")
 
 	// ErrCompanyRequired is returned on a hierarchical groups client for a group profile update
-	// whose company is unknown. Bind one with ForCompany; a $company_id profile is its own company.
+	// whose company is unknown. Bind one with ForCompany.
 	ErrCompanyRequired = errors.New("company required for hierarchical groups")
 )
 
@@ -130,8 +130,8 @@ func (i MixpanelIdentity) applyTo(properties map[string]any) {
 // ErrUnsupportedHierarchicalOperation. The other distinct id People methods send to /groups when
 // the distinct id has the form $company:{company}|$user:{user}, and return ErrInvalidIdentity for
 // any other distinct id. The ByIdentity people methods address a profile without needing a
-// distinct id. Group profile updates require a company: a $company_id profile is its own company,
-// and other groups need one bound with ForCompany, or they return ErrCompanyRequired.
+// distinct id. Group profile updates require a company: bind one with ForCompany, or they return
+// ErrCompanyRequired.
 //
 // Events are sent unchanged.
 //
@@ -152,11 +152,11 @@ func HierarchicalGroups() Options {
 
 // ForCompany returns a copy of the client that adds a top-level $company_id to every group
 // profile update it sends. Hierarchical groups projects require $company_id on every /groups
-// write, including user profiles. The company's own profile needs no binding, since its group id
-// is the company:
+// write, including the company's own profile and user profiles. The Company methods update the
+// bound company's own profile:
 //
-//	mp.GroupSet(ctx, "$company_id", "acme", companyProperties)
 //	acme, err := mp.ForCompany("acme")
+//	acme.CompanySet(ctx, companyProperties)
 //	acme.GroupSet(ctx, "department", "finance", departmentProperties)
 //
 // The copy shares the receiver's http client, credentials, endpoints and feature flag providers;
@@ -169,6 +169,82 @@ func (a *ApiClient) ForCompany(companyID string) (*ApiClient, error) {
 	bound := *a
 	bound.companyID = companyID
 	return &bound, nil
+}
+
+// CompanySet sets properties on the profile of the company bound with ForCompany. It sends the
+// same request as GroupSet(ctx, "$company_id", companyID, set) on that client.
+//
+// On a client with no bound company it returns ErrCompanyRequired.
+func (a *ApiClient) CompanySet(ctx context.Context, set map[string]any) error {
+	companyID, err := a.boundCompanyID("CompanySet")
+	if err != nil {
+		return err
+	}
+	return a.GroupSet(ctx, propertyCompanyID, companyID, set)
+}
+
+// CompanySetOnce sets properties on the profile of the company bound with ForCompany only if they
+// are not already set. It sends the same request as GroupSetOnce(ctx, "$company_id", companyID, set)
+// on that client.
+//
+// On a client with no bound company it returns ErrCompanyRequired.
+func (a *ApiClient) CompanySetOnce(ctx context.Context, set map[string]any) error {
+	companyID, err := a.boundCompanyID("CompanySetOnce")
+	if err != nil {
+		return err
+	}
+	return a.GroupSetOnce(ctx, propertyCompanyID, companyID, set)
+}
+
+// CompanyDeleteProperty removes properties from the profile of the company bound with ForCompany.
+// It sends the same request as GroupDeleteProperty(ctx, "$company_id", companyID, unset) on that
+// client.
+//
+// On a client with no bound company it returns ErrCompanyRequired.
+func (a *ApiClient) CompanyDeleteProperty(ctx context.Context, unset []string) error {
+	companyID, err := a.boundCompanyID("CompanyDeleteProperty")
+	if err != nil {
+		return err
+	}
+	return a.GroupDeleteProperty(ctx, propertyCompanyID, companyID, unset)
+}
+
+// CompanyRemoveListProperty removes values from list properties on the profile of the company
+// bound with ForCompany. It sends the same request as
+// GroupRemoveListProperty(ctx, "$company_id", companyID, remove) on that client.
+//
+// On a client with no bound company it returns ErrCompanyRequired.
+func (a *ApiClient) CompanyRemoveListProperty(ctx context.Context, remove map[string]any) error {
+	companyID, err := a.boundCompanyID("CompanyRemoveListProperty")
+	if err != nil {
+		return err
+	}
+	return a.GroupRemoveListProperty(ctx, propertyCompanyID, companyID, remove)
+}
+
+// CompanyUnionListProperty merges values into list properties on the profile of the company bound
+// with ForCompany, ignoring values already present. It sends the same request as
+// GroupUnionListProperty(ctx, "$company_id", companyID, union) on that client.
+//
+// On a client with no bound company it returns ErrCompanyRequired.
+func (a *ApiClient) CompanyUnionListProperty(ctx context.Context, union map[string]any) error {
+	companyID, err := a.boundCompanyID("CompanyUnionListProperty")
+	if err != nil {
+		return err
+	}
+	return a.GroupUnionListProperty(ctx, propertyCompanyID, companyID, union)
+}
+
+// CompanyDelete deletes the profile of the company bound with ForCompany. It sends the same
+// request as GroupDelete(ctx, "$company_id", companyID) on that client.
+//
+// On a client with no bound company it returns ErrCompanyRequired.
+func (a *ApiClient) CompanyDelete(ctx context.Context) error {
+	companyID, err := a.boundCompanyID("CompanyDelete")
+	if err != nil {
+		return err
+	}
+	return a.GroupDelete(ctx, propertyCompanyID, companyID)
 }
 
 // NewIdentityEvent creates a new mixpanel event for the given identity, for Track or Import.
@@ -328,7 +404,7 @@ func (a *ApiClient) resolveProfile(identity MixpanelIdentity) (userID, companyID
 				"Device ids identify anonymous events, not profiles", ErrInvalidIdentity, identity)
 		}
 		return "", "", fmt.Errorf("%w: user profile updates require a UserID, and %s has none. "+
-			"Use GroupSet(ctx, \"$company_id\", companyID, properties) to update the company's profile",
+			"Use CompanySet(ctx, properties) on ForCompany(companyID) to update the company's profile",
 			ErrInvalidIdentity, identity)
 	}
 	if identity.CompanyID == "" {
@@ -367,26 +443,22 @@ func hierarchicalProfile(distinctID string) (userID, companyID string, err error
 	return userID, companyID, nil
 }
 
-// groupCompanyID returns the company to send with a group profile update. On a hierarchical
-// groups client it is the bound company or, for the company's own $company_id profile, the group
-// id. It returns ErrInvalidIdentity when a bound company differs from a $company_id profile's id,
-// and ErrCompanyRequired when no company is known.
+// groupCompanyID returns the company to send with a group profile update, or ErrCompanyRequired
+// on a hierarchical groups client with no company bound.
 func (a *ApiClient) groupCompanyID(groupKey, groupID string) (string, error) {
-	if !a.hierarchicalGroups {
-		return a.companyID, nil
-	}
-	if groupKey == propertyCompanyID {
-		if a.companyID != "" && a.companyID != groupID {
-			return "", fmt.Errorf("%w: the company profile's company is its own id, so group %s=%s cannot be "+
-				"updated for company %q. Nothing sent", ErrInvalidIdentity, groupKey, groupID, a.companyID)
-		}
-		if groupID != "" {
-			return groupID, nil
-		}
-	}
-	if a.companyID == "" {
+	if a.hierarchicalGroups && a.companyID == "" {
 		return "", fmt.Errorf("%w: group profile updates for hierarchical groups projects require a company. "+
 			"Use ForCompany(companyID) to send them. Nothing sent for group %s=%s", ErrCompanyRequired, groupKey, groupID)
+	}
+	return a.companyID, nil
+}
+
+// boundCompanyID returns the company bound with ForCompany, or ErrCompanyRequired when there is
+// none, whether or not the client uses hierarchical groups.
+func (a *ApiClient) boundCompanyID(method string) (string, error) {
+	if a.companyID == "" {
+		return "", fmt.Errorf("%w: %s updates the profile of the company bound with ForCompany, and this client "+
+			"has none. Use ForCompany(companyID).%s. Nothing sent", ErrCompanyRequired, method, method)
 	}
 	return a.companyID, nil
 }

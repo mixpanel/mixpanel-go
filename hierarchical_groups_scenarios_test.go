@@ -484,16 +484,12 @@ func TestScenarioSetUserPropertyWithoutUser(t *testing.T) {
 }
 
 func TestScenarioSetCompanyPropertyWithoutCompany(t *testing.T) {
-	// The company's own profile is its own company, so no ForCompany is needed.
 	requests := captureRequests(t)
 
 	err := hgClient().GroupSet(context.Background(), "$company_id", scenarioCompanyID, map[string]any{"plan": "enterprise"})
 
-	require.NoError(t, err)
-	_, message := onlyMessage(t, *requests)
-	require.Equal(t, "$company_id", message["$group_key"])
-	require.Equal(t, scenarioCompanyID, message["$group_id"])
-	require.Equal(t, scenarioCompanyID, message["$company_id"])
+	require.ErrorIs(t, err, ErrCompanyRequired)
+	require.Empty(t, *requests)
 }
 
 func TestScenarioSetCustomGroupPropertyWithoutCompany(t *testing.T) {
