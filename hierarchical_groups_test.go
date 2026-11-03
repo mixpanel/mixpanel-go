@@ -518,7 +518,7 @@ func TestIdentityUserProfiles(t *testing.T) {
 		err := hgClient().PeopleSetByIdentity(ctx, MixpanelIdentity{CompanyID: "acme"}, map[string]any{"tier": "ent"})
 
 		require.ErrorIs(t, err, ErrInvalidIdentity)
-		require.Contains(t, err.Error(), "GroupSet")
+		require.Contains(t, err.Error(), "CompanySet")
 	})
 
 	t.Run("profile update rejects empty identity", func(t *testing.T) {

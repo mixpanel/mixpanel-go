@@ -404,7 +404,7 @@ func (a *ApiClient) resolveProfile(identity MixpanelIdentity) (userID, companyID
 				"Device ids identify anonymous events, not profiles", ErrInvalidIdentity, identity)
 		}
 		return "", "", fmt.Errorf("%w: user profile updates require a UserID, and %s has none. "+
-			"Use GroupSet(ctx, \"$company_id\", companyID, properties) on ForCompany(companyID) to update the company's profile",
+			"Use CompanySet(ctx, properties) on ForCompany(companyID) to update the company's profile",
 			ErrInvalidIdentity, identity)
 	}
 	if identity.CompanyID == "" {
