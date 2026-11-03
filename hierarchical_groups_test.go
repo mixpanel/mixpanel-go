@@ -518,7 +518,7 @@ func TestIdentityUserProfiles(t *testing.T) {
 		err := hgClient().PeopleSetByIdentity(ctx, MixpanelIdentity{CompanyID: "acme"}, map[string]any{"tier": "ent"})
 
 		require.ErrorIs(t, err, ErrInvalidIdentity)
-		require.Contains(t, err.Error(), "CompanySet")
+		require.Contains(t, err.Error(), "GroupSet")
 	})
 
 	t.Run("profile update rejects empty identity", func(t *testing.T) {
@@ -632,84 +632,6 @@ func TestHierarchicalGroupProfiles(t *testing.T) {
 
 		_, message := onlyMessage(t, *requests)
 		require.Equal(t, "acme", message["$company_id"])
-	})
-
-	companyCalls := []struct {
-		name    string
-		company func(mp *ApiClient) error
-		group   func(mp *ApiClient) error
-	}{
-		{
-			"CompanySet",
-			func(mp *ApiClient) error { return mp.CompanySet(ctx, props) },
-			func(mp *ApiClient) error { return mp.GroupSet(ctx, "$company_id", "acme", props) },
-		},
-		{
-			"CompanySetOnce",
-			func(mp *ApiClient) error { return mp.CompanySetOnce(ctx, props) },
-			func(mp *ApiClient) error { return mp.GroupSetOnce(ctx, "$company_id", "acme", props) },
-		},
-		{
-			"CompanyDeleteProperty",
-			func(mp *ApiClient) error { return mp.CompanyDeleteProperty(ctx, []string{"plan"}) },
-			func(mp *ApiClient) error { return mp.GroupDeleteProperty(ctx, "$company_id", "acme", []string{"plan"}) },
-		},
-		{
-			"CompanyRemoveListProperty",
-			func(mp *ApiClient) error { return mp.CompanyRemoveListProperty(ctx, props) },
-			func(mp *ApiClient) error { return mp.GroupRemoveListProperty(ctx, "$company_id", "acme", props) },
-		},
-		{
-			"CompanyUnionListProperty",
-			func(mp *ApiClient) error {
-				return mp.CompanyUnionListProperty(ctx, map[string]any{"tags": []string{"a"}})
-			},
-			func(mp *ApiClient) error {
-				return mp.GroupUnionListProperty(ctx, "$company_id", "acme", map[string]any{"tags": []string{"a"}})
-			},
-		},
-		{
-			"CompanyDelete",
-			func(mp *ApiClient) error { return mp.CompanyDelete(ctx) },
-			func(mp *ApiClient) error { return mp.GroupDelete(ctx, "$company_id", "acme") },
-		},
-	}
-
-	t.Run("Company methods send the same bytes as Group with the bound company", func(t *testing.T) {
-		for _, client := range []struct {
-			name string
-			mp   *ApiClient
-		}{{"hierarchical", hgClient()}, {"legacy", legacyClient()}} {
-			acme := mustForCompany(t, client.mp, "acme")
-			for _, c := range companyCalls {
-				t.Run(client.name+"/"+c.name, func(t *testing.T) {
-					requests := captureRequests(t)
-					require.NoError(t, c.company(acme))
-					require.NoError(t, c.group(acme))
-
-					require.Len(t, *requests, 2)
-					require.Equal(t, (*requests)[1].url, (*requests)[0].url)
-					require.Equal(t, string((*requests)[1].body), string((*requests)[0].body))
-					_, message := onlyMessage(t, (*requests)[:1])
-					require.Equal(t, "$company_id", message["$group_key"])
-					require.Equal(t, "acme", message["$group_id"])
-					require.Equal(t, "acme", message["$company_id"])
-				})
-			}
-		}
-	})
-
-	t.Run("Company methods without a bound company are rejected", func(t *testing.T) {
-		for _, mp := range []*ApiClient{hgClient(), legacyClient()} {
-			requests := captureRequests(t)
-			for _, c := range companyCalls {
-				err := c.company(mp)
-				require.ErrorIs(t, err, ErrCompanyRequired, c.name)
-				require.Contains(t, err.Error(), "ForCompany", c.name)
-				require.Contains(t, err.Error(), c.name)
-			}
-			require.Empty(t, *requests)
-		}
 	})
 
 	t.Run("ForCompany rejects empty", func(t *testing.T) {
