@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/mixpanel/mixpanel-go/v2/flags"
@@ -193,8 +194,9 @@ func HierarchicalGroups() Options {
 //	acme.GroupSet(ctx, "department", "finance", departmentProperties)
 //
 // The copy shares the receiver's http client, credentials, endpoints and feature flag providers;
-// the receiver is unchanged. The bound company does not apply to the ByIdentity people methods,
-// which use the identity's own company.
+// the receiver is unchanged. The ByIdentity people methods use the identity's own company and do
+// not need a bound company; on a bound client they return ErrInvalidIdentity for a user from
+// another company.
 func (a *ApiClient) ForCompany(companyID string) (*ApiClient, error) {
 	if companyID == "" {
 		return nil, fmt.Errorf("%w: ForCompany needs a non-empty company id", ErrInvalidIdentity)
@@ -445,7 +447,21 @@ func (a *ApiClient) resolveProfile(identity MixpanelIdentity) (userID, companyID
 		return "", "", fmt.Errorf("%w: user profile updates on a hierarchical groups project need the identity's "+
 			"CompanyID, and %s has none", ErrCompanyRequired, identity)
 	}
+	if err := a.requireBoundCompany(identity.CompanyID, identity.String()); err != nil {
+		return "", "", err
+	}
 	return identity.UserID, identity.CompanyID, nil
+}
+
+// requireBoundCompany refuses a user from another company on a client bound with ForCompany,
+// rather than silently updating that company's profile.
+func (a *ApiClient) requireBoundCompany(companyID, described string) error {
+	if a.companyID == "" || companyID == a.companyID {
+		return nil
+	}
+	return fmt.Errorf("%w: this client is bound to company %q, but %s belongs to company %q. Update the user "+
+		"through a client for that company, or one without ForCompany. Nothing sent",
+		ErrInvalidIdentity, a.companyID, described, companyID)
 }
 
 // parseCombinedDistinctID splits a distinct id of the form $company:{company}|$user:{user} into its
@@ -465,13 +481,16 @@ func parseCombinedDistinctID(distinctID string) (userID, companyID string, ok bo
 // hierarchicalProfile returns the user and company of the $user_id group profile that a distinct
 // id names on a hierarchical groups client. User profiles on these projects are /groups profiles,
 // so only a distinct id of the form $company:{company}|$user:{user} can name one.
-func hierarchicalProfile(distinctID string) (userID, companyID string, err error) {
+func (a *ApiClient) hierarchicalProfile(distinctID string) (userID, companyID string, err error) {
 	userID, companyID, ok := parseCombinedDistinctID(distinctID)
 	if !ok {
 		return "", "", fmt.Errorf("%w: user profile updates on hierarchical groups projects need a user and a company, "+
 			"and distinct id %q does not name both. Pass MixpanelIdentity{UserID: userID, CompanyID: companyID} to a "+
 			"ByIdentity method, or a distinct id of the form $company:{company}|$user:{user}. Nothing sent",
 			ErrInvalidIdentity, distinctID)
+	}
+	if err := a.requireBoundCompany(companyID, strconv.Quote(distinctID)); err != nil {
+		return "", "", err
 	}
 	return userID, companyID, nil
 }

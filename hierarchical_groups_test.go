@@ -491,13 +491,26 @@ func TestIdentityUserProfiles(t *testing.T) {
 		require.Empty(t, *requests)
 	})
 
-	t.Run("identity company wins over ForCompany", func(t *testing.T) {
+	t.Run("ForCompany accepts a user from the bound company", func(t *testing.T) {
 		requests := captureRequests(t)
 
-		require.NoError(t, mustForCompany(t, hgClient(), "other").PeopleSetByIdentity(ctx, hgUser, props))
+		require.NoError(t, mustForCompany(t, hgClient(), "acme").PeopleSetByIdentity(ctx, hgUser, props))
 
 		_, message := onlyMessage(t, *requests)
 		require.Equal(t, "acme", message["$company_id"])
+	})
+
+	t.Run("ForCompany refuses a user from another company", func(t *testing.T) {
+		requests := captureRequests(t)
+		other := mustForCompany(t, hgClient(), "other")
+
+		err := other.PeopleSetByIdentity(ctx, hgUser, props)
+		require.ErrorIs(t, err, ErrInvalidIdentity)
+		require.Contains(t, err.Error(), `bound to company "other"`)
+
+		err = other.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties("$company:acme|$user:user_123", props)})
+		require.ErrorIs(t, err, ErrInvalidIdentity)
+		require.Empty(t, *requests)
 	})
 
 	t.Run("legacy distinct id identity uses engage", func(t *testing.T) {

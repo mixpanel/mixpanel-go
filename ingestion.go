@@ -298,7 +298,7 @@ func (a *ApiClient) PeopleSet(ctx context.Context, people []*PeopleProperties) e
 	if a.hierarchicalGroups {
 		payloads := make([]groupSetPropertyPayload, len(people))
 		for i, p := range people {
-			userID, companyID, err := hierarchicalProfile(p.DistinctID)
+			userID, companyID, err := a.hierarchicalProfile(p.DistinctID)
 			if err != nil {
 				return err
 			}
@@ -345,7 +345,7 @@ func (a *ApiClient) PeopleSetOnce(ctx context.Context, people []*PeoplePropertie
 	if a.hierarchicalGroups {
 		payloads := make([]groupSetOncePropertyPayload, len(people))
 		for i, p := range people {
-			userID, companyID, err := hierarchicalProfile(p.DistinctID)
+			userID, companyID, err := a.hierarchicalProfile(p.DistinctID)
 			if err != nil {
 				return err
 			}
@@ -410,7 +410,7 @@ type peopleUnionPayload struct {
 // returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleUnionProperty(ctx context.Context, distinctID string, union map[string]any) error {
 	if a.hierarchicalGroups {
-		userID, companyID, err := hierarchicalProfile(distinctID)
+		userID, companyID, err := a.hierarchicalProfile(distinctID)
 		if err != nil {
 			return err
 		}
@@ -464,7 +464,7 @@ type peopleListRemovePayload struct {
 // returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleRemoveListProperty(ctx context.Context, distinctID string, remove map[string]any) error {
 	if a.hierarchicalGroups {
-		userID, companyID, err := hierarchicalProfile(distinctID)
+		userID, companyID, err := a.hierarchicalProfile(distinctID)
 		if err != nil {
 			return err
 		}
@@ -494,7 +494,7 @@ type peopleDeletePropertyPayload struct {
 // returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleDeleteProperty(ctx context.Context, distinctID string, unset []string) error {
 	if a.hierarchicalGroups {
-		userID, companyID, err := hierarchicalProfile(distinctID)
+		userID, companyID, err := a.hierarchicalProfile(distinctID)
 		if err != nil {
 			return err
 		}
@@ -525,7 +525,7 @@ type peopleDeleteProfilePayload struct {
 // other distinct id returns ErrInvalidIdentity and nothing is sent.
 func (a *ApiClient) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
 	if a.hierarchicalGroups {
-		userID, companyID, err := hierarchicalProfile(distinctID)
+		userID, companyID, err := a.hierarchicalProfile(distinctID)
 		if err != nil {
 			return err
 		}
