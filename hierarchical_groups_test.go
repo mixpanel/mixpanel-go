@@ -219,11 +219,12 @@ func TestIdentityEvents(t *testing.T) {
 		require.NotContains(t, event.Properties, "$company_id")
 	})
 
-	t.Run("user without company or device is rejected for hierarchical groups", func(t *testing.T) {
-		_, err := hgClient().NewIdentityEvent("Signup", MixpanelIdentity{UserID: "user_123"}, nil)
+	t.Run("user without company is sent as given for hierarchical groups", func(t *testing.T) {
+		event, err := hgClient().NewIdentityEvent("Signup", MixpanelIdentity{UserID: "user_123"}, nil)
+		require.NoError(t, err)
 
-		require.ErrorIs(t, err, ErrInvalidIdentity)
-		require.Contains(t, err.Error(), "cannot be merged")
+		require.Equal(t, "user_123", event.Properties["$user_id"])
+		require.NotContains(t, event.Properties, "$company_id")
 	})
 
 	t.Run("user with device but no company is allowed for hierarchical groups", func(t *testing.T) {

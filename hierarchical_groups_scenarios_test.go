@@ -465,11 +465,14 @@ func TestScenarioIdentifyWithoutCompany(t *testing.T) {
 	mp := hgClient()
 	userOnly := MixpanelIdentity{UserID: scenarioUserID}
 
-	_, err := mp.NewIdentityEvent("Scenario Event", userOnly, nil)
-	require.ErrorIs(t, err, ErrInvalidIdentity)
+	// The event is sent as given; a user profile needs the company.
+	event, err := mp.NewIdentityEvent("Scenario Event", userOnly, nil)
+	require.NoError(t, err)
+	require.Equal(t, scenarioUserID, event.Properties["$user_id"])
+	require.NotContains(t, event.Properties, "$company_id")
 
 	err = mp.PeopleSetByIdentity(context.Background(), userOnly, map[string]any{"plan": "pro"})
-	require.ErrorIs(t, err, ErrInvalidIdentity)
+	require.ErrorIs(t, err, ErrCompanyRequired)
 
 	require.Empty(t, *requests)
 }

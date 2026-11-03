@@ -56,10 +56,11 @@ var (
 //	mixpanel.MixpanelIdentity{DeviceID: "device_abc"}                     // anonymous, no user yet
 //	mixpanel.MixpanelIdentity{CompanyID: "acme"}                          // a company, no user
 //
-// Which combinations are valid depends on the project, so the client rather than this type
-// decides. On a hierarchical groups project the company is part of the user's identity: a
-// UserID sent without a CompanyID resolves to a different user that nothing reconciles later,
-// so the client rejects it. A user who belongs to two companies is two users, by design.
+// Which combinations are valid depends on the project, so the client rather than this type decides.
+// On a hierarchical groups project the company is part of the user's identity: a UserID sent
+// without a CompanyID resolves to a different user that nothing reconciles later, so include the
+// company whenever the user has one. Events still send a user id without one as given; user profile
+// updates need the company. A user who belongs to two companies is two users, by design.
 //
 // It is named MixpanelIdentity because this package already exports an Identity interface
 // (Alias and Merge).
@@ -408,14 +409,6 @@ func (a *ApiClient) requireIdentityMatchesProject(identity MixpanelIdentity) err
 		return fmt.Errorf("%w: %s requires a hierarchical groups client: mixpanel.NewApiClient(token, mixpanel.HierarchicalGroups())",
 			ErrInvalidIdentity, identity)
 	}
-	// The company is part of a hierarchical user's identity, not a one-time association. A
-	// $user_id sent without one resolves to a separate user that nothing reconciles later.
-	// A device id rescues that case: Mixpanel ignores the user id, keeps the event under the
-	// device, and links it to the company-scoped user once a later event carries all three.
-	if a.hierarchicalGroups && identity.UserID != "" && identity.CompanyID == "" && identity.DeviceID == "" {
-		return fmt.Errorf("%w: %s needs a CompanyID on a hierarchical groups project. A user id sent without one, "+
-			"and without a device id, names a separate user that cannot be merged afterwards", ErrInvalidIdentity, identity)
-	}
 	return nil
 }
 
@@ -443,7 +436,7 @@ func (a *ApiClient) resolveProfile(identity MixpanelIdentity) (userID, companyID
 			ErrInvalidIdentity, identity)
 	}
 	if identity.CompanyID == "" {
-		// Only reachable with a DeviceID, which events accept but profiles cannot use.
+		// Events accept a user without a company, but a user profile is a group profile within one.
 		return "", "", fmt.Errorf("%w: user profile updates on a hierarchical groups project need the identity's "+
 			"CompanyID, and %s has none", ErrCompanyRequired, identity)
 	}
