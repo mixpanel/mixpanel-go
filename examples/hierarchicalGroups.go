@@ -27,12 +27,8 @@ func HierarchicalGroups() error {
 		return err
 	}
 
-	// Group profile updates need the company, bound with ForCompany
-	acme, err := mp.ForCompany("acme")
-	if err != nil {
-		return err
-	}
-	if err := acme.GroupSet(ctx, "$company_id", "acme", map[string]any{"tier": "enterprise"}); err != nil {
+	// The company's own profile is its own company, so it needs no ForCompany
+	if err := mp.GroupSet(ctx, "$company_id", "acme", map[string]any{"tier": "enterprise"}); err != nil {
 		return err
 	}
 

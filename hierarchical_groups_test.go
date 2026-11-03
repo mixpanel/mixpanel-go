@@ -518,7 +518,8 @@ func TestIdentityUserProfiles(t *testing.T) {
 		err := hgClient().PeopleSetByIdentity(ctx, MixpanelIdentity{CompanyID: "acme"}, map[string]any{"tier": "ent"})
 
 		require.ErrorIs(t, err, ErrInvalidIdentity)
-		require.Contains(t, err.Error(), "GroupSet")
+		require.Contains(t, err.Error(), `Use GroupSet(ctx, "$company_id", companyID, properties) to update the company's profile`)
+		require.NotContains(t, err.Error(), "ForCompany")
 	})
 
 	t.Run("profile update rejects empty identity", func(t *testing.T) {
@@ -613,6 +614,87 @@ func TestHierarchicalGroupProfiles(t *testing.T) {
 			require.Contains(t, err.Error(), "ForCompany")
 		}
 		require.Empty(t, *requests)
+	})
+
+	companyCalls := func(mp *ApiClient, companyID string) []func() error {
+		return []func() error{
+			func() error { return mp.GroupSet(ctx, "$company_id", companyID, props) },
+			func() error { return mp.GroupSetOnce(ctx, "$company_id", companyID, props) },
+			func() error { return mp.GroupDelete(ctx, "$company_id", companyID) },
+			func() error { return mp.GroupRemoveListProperty(ctx, "$company_id", companyID, props) },
+			func() error {
+				return mp.GroupUnionListProperty(ctx, "$company_id", companyID, map[string]any{"tags": []string{"a"}})
+			},
+			func() error { return mp.GroupDeleteProperty(ctx, "$company_id", companyID, []string{"plan"}) },
+		}
+	}
+
+	requireCompanyMessages := func(t *testing.T, requests []capturedRequest) {
+		t.Helper()
+		require.Len(t, requests, 6)
+		for _, r := range requests {
+			var messages []map[string]any
+			require.NoError(t, json.Unmarshal(r.body, &messages))
+			require.Len(t, messages, 1, r.url)
+			require.Equal(t, "$company_id", messages[0]["$group_key"], r.url)
+			require.Equal(t, "acme", messages[0]["$group_id"], r.url)
+			require.Equal(t, "acme", messages[0]["$company_id"], r.url)
+		}
+	}
+
+	t.Run("company profile infers its company from the group id", func(t *testing.T) {
+		requests := captureRequests(t)
+		for _, call := range companyCalls(hgClient(), "acme") {
+			require.NoError(t, call())
+		}
+		requireCompanyMessages(t, *requests)
+	})
+
+	t.Run("company profile with matching bound company", func(t *testing.T) {
+		requests := captureRequests(t)
+		for _, call := range companyCalls(mustForCompany(t, hgClient(), "acme"), "acme") {
+			require.NoError(t, call())
+		}
+		requireCompanyMessages(t, *requests)
+	})
+
+	t.Run("company profile with a different bound company is rejected", func(t *testing.T) {
+		requests := captureRequests(t)
+		for _, call := range companyCalls(mustForCompany(t, hgClient(), "other"), "acme") {
+			err := call()
+			require.ErrorIs(t, err, ErrInvalidIdentity)
+			require.NotErrorIs(t, err, ErrCompanyRequired)
+			require.Contains(t, err.Error(), "the company profile's company is its own id")
+		}
+		require.Empty(t, *requests)
+	})
+
+	t.Run("company profile with an empty id still needs a company", func(t *testing.T) {
+		requests := captureRequests(t)
+		for _, call := range companyCalls(hgClient(), "") {
+			require.ErrorIs(t, call(), ErrCompanyRequired)
+		}
+		require.Empty(t, *requests)
+	})
+
+	t.Run("legacy company profile without company is unchanged", func(t *testing.T) {
+		requests := captureRequests(t)
+
+		require.NoError(t, legacyClient().GroupSet(ctx, "$company_id", "acme", map[string]any{"plan": "x"}))
+
+		require.Len(t, *requests, 1)
+		require.JSONEq(t, `[{"$token":"token","$group_key":"$company_id","$group_id":"acme","$set":{"plan":"x"}}]`,
+			string((*requests)[0].body))
+	})
+
+	t.Run("legacy company profile keeps a different bound company", func(t *testing.T) {
+		requests := captureRequests(t)
+
+		require.NoError(t, mustForCompany(t, legacyClient(), "other").GroupSet(ctx, "$company_id", "acme", props))
+
+		_, message := onlyMessage(t, *requests)
+		require.Equal(t, "acme", message["$group_id"])
+		require.Equal(t, "other", message["$company_id"])
 	})
 
 	t.Run("legacy group unchanged", func(t *testing.T) {
