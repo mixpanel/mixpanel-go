@@ -75,6 +75,29 @@ func mustForCompany(t *testing.T, client *ApiClient, companyID string) *ApiClien
 
 var hgUser = MixpanelIdentity{UserID: "user_123", CompanyID: "acme"}
 
+func TestIdentityFlagContext(t *testing.T) {
+	t.Run("hierarchical identity", func(t *testing.T) {
+		identity := MixpanelIdentity{UserID: "user_123", CompanyID: "acme", DeviceID: "device_abc"}
+
+		require.Equal(t, flags.FlagContext{
+			"$user_id":          "user_123",
+			"$company_id":       "acme",
+			"device_id":         "device_abc",
+			"department":        "finance",
+			"custom_properties": map[string]any{"plan": "enterprise"},
+		}, identity.FlagContext(
+			map[string]any{"department": "finance"},
+			map[string]any{"plan": "enterprise"},
+		))
+	})
+
+	t.Run("plain distinct id", func(t *testing.T) {
+		identity := MixpanelIdentity{DistinctID: "user_123"}
+
+		require.Equal(t, flags.FlagContext{"distinct_id": "user_123"}, identity.FlagContext(nil, nil))
+	})
+}
+
 func TestIdentityEvents(t *testing.T) {
 	t.Run("hierarchical event sends user and company without distinct id", func(t *testing.T) {
 		event, err := hgClient().NewIdentityEvent("Signup", hgUser, nil)

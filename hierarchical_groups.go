@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/mixpanel/mixpanel-go/v2/flags"
 )
 
 const (
@@ -100,6 +102,37 @@ func (i MixpanelIdentity) String() string {
 		}
 	}
 	return "MixpanelIdentity{" + strings.Join(parts, ", ") + "}"
+}
+
+// FlagContext builds a feature flag evaluation context for the identity, so callers do not
+// hand-write reserved keys such as $company_id. The ids go under the keys flags read, groups such
+// as {"department": "finance"} at the top level, and customProperties, used by runtime targeting
+// rules, under custom_properties. Either map may be nil.
+//
+//	fc := identity.FlagContext(nil, map[string]any{"plan": "enterprise"})
+func (i MixpanelIdentity) FlagContext(groups, customProperties map[string]any) flags.FlagContext {
+	fc := flags.FlagContext{}
+	for key, value := range groups {
+		fc[key] = value
+	}
+	for _, f := range []struct{ key, value string }{
+		{"distinct_id", i.DistinctID},
+		{propertyUserID, i.UserID},
+		{propertyCompanyID, i.CompanyID},
+		{"device_id", i.DeviceID},
+	} {
+		if f.value != "" {
+			fc[f.key] = f.value
+		}
+	}
+	if len(customProperties) > 0 {
+		custom := make(map[string]any, len(customProperties))
+		for key, value := range customProperties {
+			custom[key] = value
+		}
+		fc["custom_properties"] = custom
+	}
+	return fc
 }
 
 // applyTo writes the identity's keys into properties, replacing caller-supplied values for the same keys.
