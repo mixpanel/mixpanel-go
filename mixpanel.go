@@ -236,18 +236,18 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig, builder TrackerBuilder) Opt
 	}
 }
 
-// buildLocalFlags creates LocalFlags from the configured settings. The provider is a hierarchical
-// groups provider when either its config or the client says so.
+// buildLocalFlags creates LocalFlags from the configured settings. The client's HierarchicalGroups
+// option replaces the config's HierarchicalGroups, so the client decides for its providers.
 func (a *ApiClient) buildLocalFlags() {
 	config := a.localFlagsConfig
-	config.HierarchicalGroups = config.HierarchicalGroups || a.hierarchicalGroups
+	config.HierarchicalGroups = a.hierarchicalGroups
 	a.LocalFlags = flags.NewLocalFeatureFlagsProvider(a.token, version, config, a.localFlagsTracker)
 }
 
 // buildRemoteFlags creates RemoteFlags from the configured settings, like buildLocalFlags.
 func (a *ApiClient) buildRemoteFlags() {
 	config := a.remoteFlagsConfig
-	config.HierarchicalGroups = config.HierarchicalGroups || a.hierarchicalGroups
+	config.HierarchicalGroups = a.hierarchicalGroups
 	a.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(a.token, version, config, a.remoteFlagsTracker)
 }
 

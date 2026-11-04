@@ -33,8 +33,9 @@ type FlagsConfig struct {
 	ExposureExecutor func(send func())
 	// HierarchicalGroups marks the project as using hierarchical groups. Exposure events are
 	// then attributed by the context's $company_id (and $user_id when present) as well as by
-	// distinct_id. It does not change evaluation. Providers created by mixpanel.NewApiClient
-	// inherit the client's HierarchicalGroups option.
+	// distinct_id. It does not change evaluation. Set it only on a provider created directly;
+	// providers created by mixpanel.NewApiClient take the client's HierarchicalGroups option
+	// instead.
 	HierarchicalGroups bool
 }
 

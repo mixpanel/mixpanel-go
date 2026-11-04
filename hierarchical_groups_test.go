@@ -948,6 +948,14 @@ func TestHierarchicalGroupsFlagExposure(t *testing.T) {
 		}
 	})
 
+	t.Run("the client option replaces the flags config setting", func(t *testing.T) {
+		config := flags.DefaultRemoteFlagsConfig()
+		config.HierarchicalGroups = true
+		client := NewApiClient("token", WithRemoteFlags(config, nil))
+
+		require.Empty(t, flagExposures(t, client, hgContext))
+	})
+
 	t.Run("hierarchical exposure keeps a distinct id the context sent", func(t *testing.T) {
 		exposures := flagExposures(t, NewApiClient("token", HierarchicalGroups(), WithRemoteFlags(flags.DefaultRemoteFlagsConfig(), nil)),
 			flags.FlagContext{"distinct_id": "$company:acme|$user:user_123", "$user_id": "user_123", "$company_id": "acme"})
