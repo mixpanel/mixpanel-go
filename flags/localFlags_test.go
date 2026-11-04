@@ -3,7 +3,9 @@ package flags
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/jarcoal/httpmock"
@@ -814,5 +816,388 @@ func TestLocalFeatureFlagsProvider_ExposureExecutor(t *testing.T) {
 		require.Equal(t, 0, trackerCalls)
 		capturedSend()
 		require.Equal(t, 1, trackerCalls)
+	})
+}
+
+// Hierarchical groups
+
+const hgTemplate = "$company:{$company_id}|$user:{$user_id}"
+
+type trackedExposure struct {
+	distinctID string
+	props      map[string]any
+}
+
+// newDefinitionsProvider returns a started local provider serving the given raw flag definitions.
+func newDefinitionsProvider(t *testing.T, hierarchicalGroups bool, definitions ...string) (*LocalFeatureFlagsProvider, *[]trackedExposure) {
+	t.Helper()
+	httpmock.Activate()
+	t.Cleanup(httpmock.DeactivateAndReset)
+	httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+		httpmock.NewStringResponder(200, `{"flags":[`+strings.Join(definitions, ",")+`]}`))
+
+	config := DefaultLocalFlagsConfig()
+	config.EnablePolling = false
+	config.HierarchicalGroups = hierarchicalGroups
+
+	var exposures []trackedExposure
+	tracker := func(distinctID string, eventName string, props map[string]any) {
+		exposures = append(exposures, trackedExposure{distinctID: distinctID, props: props})
+	}
+	provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
+	require.NoError(t, provider.StartPollingForDefinitions(context.Background()))
+	return provider, &exposures
+}
+
+// flagDefinition returns a definition with one fully rolled out variant. extra is spliced into
+// the JSON object, e.g. `"context_value_template":"..."`.
+func flagDefinition(key, contextProperty, extra string) string {
+	if extra != "" {
+		extra = "," + extra
+	}
+	return `{"id":"id-` + key + `","key":"` + key + `","status":"active","project_id":1,"context":"` + contextProperty + `"` + extra + `,
+		"ruleset":{"variants":[{"key":"variant-a","value":"value-a","split":1}],"rollout":[{"rollout_percentage":1}]}}`
+}
+
+func templateField(template string) string {
+	return `"context_value_template":"` + template + `"`
+}
+
+// hgTestDefinition is the shared cross-SDK key test definition.
+const hgTestDefinition = `{"id":"id-hg","key":"hg-test","status":"active","project_id":1,"context":"distinct_id",
+	"context_value_template":"$company:{$company_id}|$user:{$user_id}",
+	"hash_salt":"880dc3e584b4452fb769808ca18dc9a6",
+	"ruleset":{"variants":[{"key":"On","value":true,"split":1},{"key":"Off","value":false,"split":0}],
+		"rollout":[{"rollout_percentage":0.5,"variant_splits":{"Off":0,"On":1}}],
+		"test":{"users":{}}}}`
+
+// hgTestSalt is the rollout salt of hgTestDefinition's first rollout for a flag with the given key.
+func hgTestSalt(key string) string {
+	return key + "880dc3e584b4452fb769808ca18dc9a60"
+}
+
+// hgDefinition returns hgTestDefinition under another key, context property and template.
+func hgDefinition(key, contextProperty, template string) string {
+	definition := strings.Replace(hgTestDefinition, `"key":"hg-test"`, `"key":"`+key+`"`, 1)
+	definition = strings.Replace(definition, `"context":"distinct_id"`, `"context":"`+contextProperty+`"`, 1)
+	field := ""
+	if template != "" {
+		field = templateField(template) + ","
+	}
+	return strings.Replace(definition, templateField(hgTemplate)+",", field, 1)
+}
+
+// The templates the service sends for each context property.
+var hgTemplates = map[string]string{
+	"distinct_id": "$company:{$company_id}|$user:{$user_id}",
+	"device_id":   "{device_id}",
+	"$user_id":    "$company:{$company_id}|$user:{$user_id}",
+	"$company_id": "$company:{$company_id}",
+	"department":  "$company:{$company_id}|department:{department}",
+}
+
+func TestResolveAssignmentKey(t *testing.T) {
+	hgContext := FlagContext{"distinct_id": "user_123", "device_id": "device_abc", "$user_id": "user_123",
+		"$company_id": "company_123", "department": "finance"}
+	nonHGContext := FlagContext{"distinct_id": "user_123", "device_id": "device_abc", "$user_id": "user_123",
+		"department": "finance"}
+
+	tests := []struct {
+		name            string
+		contextProperty string
+		template        string
+		flagContext     FlagContext
+		expectedKey     any
+		expectedOK      bool
+	}{
+		{"distinct_id template", "distinct_id", hgTemplates["distinct_id"], hgContext, "$company:company_123|$user:user_123", true},
+		{"device_id template", "device_id", hgTemplates["device_id"], hgContext, "device_abc", true},
+		{"$user_id template", "$user_id", hgTemplates["$user_id"], hgContext, "$company:company_123|$user:user_123", true},
+		{"$company_id template", "$company_id", hgTemplates["$company_id"], hgContext, "$company:company_123", true},
+		{"department template", "department", hgTemplates["department"], hgContext, "$company:company_123|department:finance", true},
+
+		{"non-HG distinct_id uses raw", "distinct_id", hgTemplates["distinct_id"], nonHGContext, "user_123", true},
+		{"non-HG device_id uses raw", "device_id", hgTemplates["device_id"], nonHGContext, "device_abc", true},
+		{"non-HG $user_id uses raw", "$user_id", hgTemplates["$user_id"], nonHGContext, "user_123", true},
+		{"non-HG $company_id is missing", "$company_id", hgTemplates["$company_id"], nonHGContext, nil, false},
+		{"non-HG department uses raw", "department", hgTemplates["department"], nonHGContext, "finance", true},
+
+		{"absent placeholder falls back to raw", "distinct_id", hgTemplates["distinct_id"],
+			FlagContext{"distinct_id": "raw", "$company_id": "c1"}, "raw", true},
+		{"nil placeholder falls back to raw", "distinct_id", hgTemplates["distinct_id"],
+			FlagContext{"distinct_id": "raw", "$company_id": "c1", "$user_id": nil}, "raw", true},
+		{"empty placeholder value is used", "distinct_id", hgTemplates["distinct_id"],
+			FlagContext{"distinct_id": "raw", "$company_id": "", "$user_id": "u1"}, "$company:|$user:u1", true},
+		{"no template uses raw", "distinct_id", "", hgContext, "user_123", true},
+		{"no template keeps a present nil raw value", "distinct_id", "", FlagContext{"distinct_id": nil}, nil, true},
+		{"raw also missing", "distinct_id", hgTemplates["distinct_id"], FlagContext{"$company_id": "c1"}, nil, false},
+		{"no template and raw missing", "distinct_id", "", FlagContext{"$company_id": "c1", "$user_id": "u1"}, nil, false},
+		{"literal text outside braces", "account", "org/{a}-{b}!",
+			FlagContext{"account": "raw", "a": "x", "b": 2}, "org/x-2!", true},
+		{"template without placeholders is literal", "account", "fixed", FlagContext{}, "fixed", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := &ExperimentationFlag{Context: tt.contextProperty, ContextValueTemplate: tt.template}
+			key, ok := resolveAssignmentKey(flag, tt.flagContext)
+			require.Equal(t, tt.expectedOK, ok)
+			require.Equal(t, tt.expectedKey, key)
+		})
+	}
+}
+
+func TestLocalFeatureFlagsProvider_ContextValueTemplate(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("rollout hashes on the resolved key", func(t *testing.T) {
+		for property, template := range hgTemplates {
+			t.Run(property, func(t *testing.T) {
+				provider, _ := newDefinitionsProvider(t, true, hgDefinition("flag", property, template))
+
+				var on, off int
+				for i := 0; i < 50; i++ {
+					flagCtx := FlagContext{"distinct_id": "user_123", "device_id": fmt.Sprintf("device_%d", i), "$user_id": "user_123",
+						"$company_id": fmt.Sprintf("company_%d", i), "department": "finance"}
+					expectedKey, ok := resolveAssignmentKey(&ExperimentationFlag{Context: property, ContextValueTemplate: template}, flagCtx)
+					require.True(t, ok)
+
+					variant, err := provider.GetVariant(ctx, "flag", SelectedVariant{}, flagCtx, false)
+					require.NoError(t, err)
+					expectedIn := normalizedHash(expectedKey.(string), hgTestSalt("flag")) < 0.5
+					require.Equal(t, expectedIn, variant.VariantKey != nil, "key %s", expectedKey)
+					if expectedIn {
+						on++
+					} else {
+						off++
+					}
+				}
+				// A 50% rollout over 50 keys exercises both sides of the hash.
+				require.Positive(t, on)
+				require.Positive(t, off)
+			})
+		}
+	})
+
+	t.Run("non-HG context gets the same variant as without a template", func(t *testing.T) {
+		templated, _ := newDefinitionsProvider(t, false, hgTestDefinition)
+		var results []SelectedVariant
+		for i := 0; i < 50; i++ {
+			variant, err := templated.GetVariant(ctx, "hg-test", SelectedVariant{},
+				FlagContext{"distinct_id": fmt.Sprintf("user_%d", i), "$user_id": fmt.Sprintf("user_%d", i)}, false)
+			require.NoError(t, err)
+			results = append(results, variant)
+		}
+
+		// The same definition without a template is how main reads it.
+		plain, _ := newDefinitionsProvider(t, false, hgDefinition("hg-test", "distinct_id", ""))
+		var on int
+		for i := 0; i < 50; i++ {
+			distinctID := fmt.Sprintf("user_%d", i)
+			variant, err := plain.GetVariant(ctx, "hg-test", SelectedVariant{},
+				FlagContext{"distinct_id": distinctID, "$user_id": distinctID}, false)
+			require.NoError(t, err)
+			require.Equal(t, variant, results[i], distinctID)
+			require.Equal(t, normalizedHash(distinctID, hgTestSalt("hg-test")) < 0.5, variant.VariantKey != nil, distinctID)
+			if variant.VariantKey != nil {
+				on++
+			}
+		}
+		require.Positive(t, on)
+		require.Less(t, on, 50)
+	})
+
+	t.Run("raw value also missing returns the fallback", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField(hgTemplates["distinct_id"])))
+
+		variant, err := provider.GetVariant(ctx, "flag", SelectedVariant{}, FlagContext{"$company_id": "acme"}, true)
+		require.NoError(t, err)
+		require.Equal(t, FallbackReasonMissingContextKey, variant.FallbackReason)
+		require.Empty(t, *exposures)
+	})
+
+	t.Run("template resolves without a raw value", func(t *testing.T) {
+		provider, _ := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField(hgTemplates["distinct_id"])))
+
+		result, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
+		require.NoError(t, err)
+		require.Equal(t, "value-a", result)
+	})
+}
+
+func TestLocalFeatureFlagsProvider_ContextValueTemplateTestUsers(t *testing.T) {
+	ctx := context.Background()
+	definition := func(contextProperty, template string) string {
+		extra := ""
+		if template != "" {
+			extra = "," + templateField(template)
+		}
+		return `{"id":"id","key":"flag","status":"active","project_id":1,"context":"` + contextProperty + `"` + extra + `,
+			"ruleset":{"variants":[{"key":"control","value":"control-value","split":1},{"key":"treatment","value":"treatment-value","split":0}],
+				"rollout":[{"rollout_percentage":1}],
+				"test":{"users":{"$company:acme|$user:user-123":"treatment","raw-user":"treatment"}}}}`
+	}
+
+	tests := []struct {
+		name            string
+		contextProperty string
+		template        string
+		flagContext     FlagContext
+		expected        string
+	}{
+		{"distinct_id flag looks up the resolved key", "distinct_id", hgTemplate,
+			FlagContext{"distinct_id": "other", "$company_id": "acme", "$user_id": "user-123"}, "treatment-value"},
+		{"distinct_id flag ignores the raw distinct id once the template resolves", "distinct_id", hgTemplate,
+			FlagContext{"distinct_id": "raw-user", "$company_id": "acme", "$user_id": "other"}, "control-value"},
+		{"distinct_id flag looks up the raw distinct id when the template does not resolve", "distinct_id", hgTemplate,
+			FlagContext{"distinct_id": "raw-user"}, "treatment-value"},
+		{"distinct_id flag without template looks up the raw distinct id", "distinct_id", "",
+			FlagContext{"distinct_id": "raw-user", "$company_id": "acme", "$user_id": "user-123"}, "treatment-value"},
+		{"other flag looks up the raw distinct id", "account", hgTemplate,
+			FlagContext{"account": "a1", "distinct_id": "raw-user", "$company_id": "acme", "$user_id": "other"}, "treatment-value"},
+		{"other flag does not look up the resolved key", "account", hgTemplate,
+			FlagContext{"account": "a1", "$company_id": "acme", "$user_id": "user-123"}, "control-value"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, exposures := newDefinitionsProvider(t, true, definition(tt.contextProperty, tt.template))
+
+			result, err := provider.GetVariantValue(ctx, "flag", "fallback", tt.flagContext)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, result)
+			require.Len(t, *exposures, 1)
+			require.Equal(t, tt.expected == "treatment-value", (*exposures)[0].props["$is_qa_tester"] == true)
+		})
+	}
+}
+
+func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("carries user and company without distinct id", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", templateField(hgTemplate)))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"$company_id": "acme", "$user_id": "user-123"})
+		require.NoError(t, err)
+
+		require.Len(t, *exposures, 1)
+		exposure := (*exposures)[0]
+		require.Equal(t, "", exposure.distinctID)
+		require.Equal(t, "user-123", exposure.props["$user_id"])
+		require.Equal(t, "acme", exposure.props["$company_id"])
+		require.NotContains(t, exposure.props, "distinct_id")
+		require.Equal(t, "local", exposure.props["Flag evaluation mode"])
+	})
+
+	t.Run("carries user, company and distinct id when sent", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback",
+			FlagContext{"distinct_id": "$company:acme|$user:user-123", "$company_id": "acme", "$user_id": "user-123"})
+		require.NoError(t, err)
+
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "$company:acme|$user:user-123", (*exposures)[0].distinctID)
+		require.Equal(t, "user-123", (*exposures)[0].props["$user_id"])
+		require.Equal(t, "acme", (*exposures)[0].props["$company_id"])
+	})
+
+	t.Run("company alone attributes the exposure", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "account", ""))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"account": "a1", "$company_id": "acme"})
+		require.NoError(t, err)
+
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "", (*exposures)[0].distinctID)
+		require.Equal(t, "acme", (*exposures)[0].props["$company_id"])
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+	})
+
+	t.Run("drops exposure without company or distinct id", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "account", ""))
+
+		for _, flagCtx := range []FlagContext{
+			{"account": "a1", "$user_id": "user-123"},
+			{"account": "a1", "$company_id": "", "distinct_id": ""},
+		} {
+			result, err := provider.GetVariantValue(ctx, "flag", "fallback", flagCtx)
+			require.NoError(t, err)
+			require.Equal(t, "value-a", result)
+		}
+		require.Empty(t, *exposures)
+	})
+
+	t.Run("legacy project ignores company and user in context", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, false, flagDefinition("flag", "distinct_id", ""))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback",
+			FlagContext{"distinct_id": "user-123", "$company_id": "acme", "$user_id": "user-123"})
+		require.NoError(t, err)
+
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "user-123", (*exposures)[0].distinctID)
+		require.NotContains(t, (*exposures)[0].props, "$company_id")
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+	})
+
+	t.Run("legacy project needs a distinct id", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, false, flagDefinition("flag", "account", ""))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"account": "a1", "$company_id": "acme", "$user_id": "u1"})
+		require.NoError(t, err)
+		require.Empty(t, *exposures)
+	})
+}
+
+func TestLocalFeatureFlagsProvider_WithoutContextValueTemplateUnchanged(t *testing.T) {
+	ctx := context.Background()
+	provider, exposures := newDefinitionsProvider(t, false, hgTestDefinition, hgDefinition("plain", "distinct_id", ""))
+
+	t.Run("hashes the distinct id exactly as before", func(t *testing.T) {
+		for i := 0; i < 50; i++ {
+			distinctID := fmt.Sprintf("$company:acme|$user:u%d", i)
+			variant, err := provider.GetVariant(ctx, "plain", SelectedVariant{}, FlagContext{"distinct_id": distinctID}, false)
+			require.NoError(t, err)
+			expectedIn := normalizedHash(distinctID, "plain880dc3e584b4452fb769808ca18dc9a60") < 0.5
+			require.Equal(t, expectedIn, variant.VariantKey != nil, distinctID)
+		}
+	})
+
+	t.Run("a present nil context value is still hashed", func(t *testing.T) {
+		variant, err := provider.GetVariant(ctx, "plain", SelectedVariant{}, FlagContext{"distinct_id": nil}, false)
+		require.NoError(t, err)
+		require.NotEqual(t, FallbackReasonMissingContextKey, variant.FallbackReason)
+	})
+
+	t.Run("hierarchical context alone falls back", func(t *testing.T) {
+		variant, err := provider.GetVariant(ctx, "plain", SelectedVariant{}, FlagContext{"$company_id": "acme", "$user_id": "u1"}, false)
+		require.NoError(t, err)
+		require.Equal(t, FallbackReasonMissingContextKey, variant.FallbackReason)
+	})
+
+	t.Run("exposure is the legacy event", func(t *testing.T) {
+		*exposures = nil
+		var userID string
+		for i := 0; ; i++ {
+			userID = fmt.Sprintf("u%d", i)
+			if normalizedHash(userID, "plain880dc3e584b4452fb769808ca18dc9a60") < 0.5 {
+				break
+			}
+		}
+		_, err := provider.GetVariantValue(ctx, "plain", false, FlagContext{"distinct_id": userID})
+		require.NoError(t, err)
+
+		require.Len(t, *exposures, 1)
+		require.Equal(t, userID, (*exposures)[0].distinctID)
+		require.Equal(t, map[string]any{
+			"Experiment name":            "plain",
+			"Variant name":               (*exposures)[0].props["Variant name"],
+			"$experiment_type":           "feature_flag",
+			"Flag evaluation mode":       "local",
+			"Variant fetch latency (ms)": (*exposures)[0].props["Variant fetch latency (ms)"],
+		}, (*exposures)[0].props)
+		require.Equal(t, "On", *(*exposures)[0].props["Variant name"].(*string))
 	})
 }

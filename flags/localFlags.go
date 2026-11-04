@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -48,13 +49,14 @@ func NewLocalFeatureFlagsProvider(token string, version string, config LocalFlag
 	}
 	provider := &LocalFeatureFlagsProvider{
 		featureFlagsProvider: featureFlagsProvider{
-			token:            token,
-			apiHost:          config.APIHost,
-			version:          version,
-			evaluationMode:   "local",
-			tracker:          tracker,
-			client:           client,
-			exposureExecutor: config.ExposureExecutor,
+			token:              token,
+			apiHost:            config.APIHost,
+			version:            version,
+			evaluationMode:     "local",
+			tracker:            tracker,
+			client:             client,
+			exposureExecutor:   config.ExposureExecutor,
+			hierarchicalGroups: config.HierarchicalGroups,
 		},
 		config:         config,
 		stopPolling:    make(chan struct{}),
@@ -140,14 +142,14 @@ func (p *LocalFeatureFlagsProvider) GetVariant(ctx context.Context, flagKey stri
 		return fallbackVariant.AsFallback(FallbackReasonFlagNotFound), nil
 	}
 
-	contextValue, ok := flagContext[flag.Context]
+	contextValue, ok := resolveAssignmentKey(flag, flagContext)
 	if !ok {
 		return fallbackVariant.AsFallback(FallbackReasonMissingContextKey), nil
 	}
 
 	var selectedVariant *SelectedVariant
 
-	if testVariant := p.getVariantOverrideForTestUser(flag, flagContext); testVariant != nil {
+	if testVariant := p.getVariantOverrideForTestUser(flag, flagContext, contextValue); testVariant != nil {
 		selectedVariant = testVariant
 	} else {
 		rollout, err := p.getAssignedRollout(flag, contextValue, flagContext)
@@ -198,12 +200,17 @@ func (p *LocalFeatureFlagsProvider) TrackExposureEvent(ctx context.Context, flag
 	p.trackExposure(flagKey, variant, flagContext, nil)
 }
 
-func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *ExperimentationFlag, flagContext FlagContext) *SelectedVariant {
+// assignmentKey is the flag's resolved assignment key. Test users are keyed by distinct id, so a
+// distinct_id flag looks them up by that key.
+func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *ExperimentationFlag, flagContext FlagContext, assignmentKey any) *SelectedVariant {
 	if flag.Ruleset.Test == nil || flag.Ruleset.Test.Users == nil {
 		return nil
 	}
 
 	distinctID, ok := flagContext["distinct_id"].(string)
+	if flag.Context == "distinct_id" {
+		distinctID, ok = assignmentKey.(string)
+	}
 	if !ok {
 		return nil
 	}
@@ -364,4 +371,35 @@ func (p *LocalFeatureFlagsProvider) fetchFlagDefinitions(ctx context.Context) er
 	p.areFlagsReady.Store(true)
 
 	return nil
+}
+
+// contextPlaceholder matches a {key} placeholder in a context value template.
+var contextPlaceholder = regexp.MustCompile(`\{([^}]+)\}`)
+
+// resolveAssignmentKey returns the value a flag hashes on. When the flag has a
+// context_value_template and every placeholder resolves, that is the filled template; otherwise it
+// is the raw context value of the flag's context property. ok is false when that is missing too.
+func resolveAssignmentKey(flag *ExperimentationFlag, flagContext FlagContext) (any, bool) {
+	if flag.ContextValueTemplate != "" {
+		if resolved, ok := applyContextValueTemplate(flag.ContextValueTemplate, flagContext); ok {
+			return resolved, true
+		}
+	}
+	value, ok := flagContext[flag.Context]
+	return value, ok
+}
+
+// applyContextValueTemplate replaces each {key} placeholder with the context value of key. Text
+// outside the braces is literal. ok is false when any placeholder key is absent or nil.
+func applyContextValueTemplate(template string, flagContext FlagContext) (string, bool) {
+	ok := true
+	resolved := contextPlaceholder.ReplaceAllStringFunc(template, func(placeholder string) string {
+		value, present := flagContext[placeholder[1:len(placeholder)-1]]
+		if !present || value == nil {
+			ok = false
+			return ""
+		}
+		return fmt.Sprintf("%v", value)
+	})
+	return resolved, ok
 }
