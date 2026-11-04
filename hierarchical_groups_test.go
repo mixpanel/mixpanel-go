@@ -152,6 +152,20 @@ func TestIdentityEvents(t *testing.T) {
 		require.NotContains(t, caller, "$user_id")
 	})
 
+	t.Run("identity drops caller supplied keys it leaves unset", func(t *testing.T) {
+		caller := map[string]any{"distinct_id": "stale", "$device_id": "stale_device", "$user_id": "stale_user", "plan": "enterprise"}
+
+		event, err := hgClient().NewIdentityEvent("Renewed", MixpanelIdentity{CompanyID: "acme"}, caller)
+		require.NoError(t, err)
+
+		require.Equal(t, "acme", event.Properties["$company_id"])
+		require.NotContains(t, event.Properties, "distinct_id")
+		require.NotContains(t, event.Properties, "$device_id")
+		require.NotContains(t, event.Properties, "$user_id")
+		require.Equal(t, "enterprise", event.Properties["plan"])
+		require.Equal(t, "stale", caller["distinct_id"], "caller properties must not be modified")
+	})
+
 	t.Run("hierarchical import event", func(t *testing.T) {
 		requests := captureRequests(t)
 		mp := hgClient()

@@ -137,20 +137,21 @@ func (i MixpanelIdentity) FlagContext(groups, customProperties map[string]any) f
 	return fc
 }
 
-// applyTo writes the identity's keys into properties, replacing caller-supplied values for the same keys.
+// applyTo writes the identity's keys into properties, replacing caller-supplied values for the same
+// keys. A key the identity leaves empty is removed, so properties never carry a stale id.
 func (i MixpanelIdentity) applyTo(properties map[string]any) {
-	if i.DistinctID != "" {
-		properties[propertyDistinctID] = i.DistinctID
+	setOrDelete(properties, propertyDistinctID, i.DistinctID)
+	setOrDelete(properties, propertyUserID, i.UserID)
+	setOrDelete(properties, propertyCompanyID, i.CompanyID)
+	setOrDelete(properties, propertyDeviceID, i.DeviceID)
+}
+
+func setOrDelete(properties map[string]any, key, value string) {
+	if value == "" {
+		delete(properties, key)
+		return
 	}
-	if i.UserID != "" {
-		properties[propertyUserID] = i.UserID
-	}
-	if i.CompanyID != "" {
-		properties[propertyCompanyID] = i.CompanyID
-	}
-	if i.DeviceID != "" {
-		properties[propertyDeviceID] = i.DeviceID
-	}
+	properties[key] = value
 }
 
 // HierarchicalGroups marks the client as belonging to a project that uses hierarchical groups.
@@ -285,10 +286,11 @@ func (a *ApiClient) CompanyDelete(ctx context.Context) error {
 
 // NewIdentityEvent creates a new mixpanel event for the given identity, for Track or Import.
 //
-// The identity's keys replace any values for the same keys in properties; other properties are
-// kept, and properties itself is not modified. An identity without a DistinctID produces an event
-// with no distinct_id; on a hierarchical groups project Mixpanel builds it from $user_id and
-// $company_id.
+// The identity decides distinct_id, $user_id, $company_id and $device_id: it replaces any values
+// for those keys in properties, and drops them from the event when it leaves the matching field
+// empty. Other properties are kept, and properties itself is not modified. An identity without a
+// DistinctID produces an event with no distinct_id; on a hierarchical groups project Mixpanel
+// builds it from $user_id and $company_id.
 //
 // It returns ErrInvalidIdentity when the identity is empty or names a company on a client created
 // without HierarchicalGroups.
