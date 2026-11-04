@@ -290,9 +290,8 @@ func (a *ApiClient) CompanyDelete(ctx context.Context) error {
 // with no distinct_id; on a hierarchical groups project Mixpanel builds it from $user_id and
 // $company_id.
 //
-// It returns ErrInvalidIdentity when the identity is empty, names a company on a client created
-// without HierarchicalGroups, or on a hierarchical groups client has a UserID with neither a
-// CompanyID nor a DeviceID.
+// It returns ErrInvalidIdentity when the identity is empty or names a company on a client created
+// without HierarchicalGroups.
 func (a *ApiClient) NewIdentityEvent(name string, identity MixpanelIdentity, properties map[string]any) (*Event, error) {
 	if err := a.requireIdentityMatchesProject(identity); err != nil {
 		return nil, err
