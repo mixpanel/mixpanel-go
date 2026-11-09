@@ -155,18 +155,31 @@ func TestIdentityEvents(t *testing.T) {
 		require.NotContains(t, caller, "$user_id")
 	})
 
-	t.Run("identity drops caller supplied keys it leaves unset", func(t *testing.T) {
-		caller := map[string]any{"distinct_id": "stale", "$device_id": "stale_device", "$user_id": "stale_user", "plan": "enterprise"}
+	t.Run("identity keeps caller supplied keys it leaves unset", func(t *testing.T) {
+		caller := map[string]any{"distinct_id": "caller", "$device_id": "caller_device", "$user_id": "caller_user",
+			"$company_id": "caller_company", "plan": "enterprise"}
 
 		event, err := hgClient().NewIdentityEvent("Renewed", MixpanelIdentity{CompanyID: "acme"}, caller)
 		require.NoError(t, err)
 
 		require.Equal(t, "acme", event.Properties["$company_id"])
-		require.NotContains(t, event.Properties, "distinct_id")
-		require.NotContains(t, event.Properties, "$device_id")
-		require.NotContains(t, event.Properties, "$user_id")
+		require.Equal(t, "caller", event.Properties["distinct_id"])
+		require.Equal(t, "caller_device", event.Properties["$device_id"])
+		require.Equal(t, "caller_user", event.Properties["$user_id"])
 		require.Equal(t, "enterprise", event.Properties["plan"])
-		require.Equal(t, "stale", caller["distinct_id"], "caller properties must not be modified")
+		require.Equal(t, "caller_company", caller["$company_id"], "caller properties must not be modified")
+	})
+
+	t.Run("identity sets only its own keys on a legacy client", func(t *testing.T) {
+		caller := map[string]any{"distinct_id": "caller", "$device_id": "caller_device"}
+
+		event, err := legacyClient().NewIdentityEvent("Signup", MixpanelIdentity{UserID: "user_123"}, caller)
+		require.NoError(t, err)
+
+		require.Equal(t, "user_123", event.Properties["$user_id"])
+		require.Equal(t, "caller", event.Properties["distinct_id"])
+		require.Equal(t, "caller_device", event.Properties["$device_id"])
+		require.NotContains(t, event.Properties, "$company_id")
 	})
 
 	t.Run("hierarchical import event", func(t *testing.T) {
@@ -531,6 +544,54 @@ func TestIdentityUserProfiles(t *testing.T) {
 		require.Empty(t, *requests)
 	})
 
+	t.Run("ForCompany uses the bound company for a user only identity", func(t *testing.T) {
+		acme := mustForCompany(t, hgClient(), "acme")
+		userOnly := MixpanelIdentity{UserID: "user_123"}
+		cases := []struct {
+			url       string
+			operation string
+			call      func() error
+		}{
+			{groupSetUrl, "$set", func() error { return acme.PeopleSetByIdentity(ctx, userOnly, props) }},
+			{groupsSetOnceUrl, "$set_once", func() error { return acme.PeopleSetOnceByIdentity(ctx, userOnly, props) }},
+			{groupsDeleteGroupUrl, "$delete", func() error { return acme.PeopleDeleteProfileByIdentity(ctx, userOnly) }},
+			{groupsRemoveFromListPropertyUrl, "$remove", func() error {
+				return acme.PeopleRemoveListPropertyByIdentity(ctx, userOnly, props)
+			}},
+			{groupsUnionListPropertyUrl, "$union", func() error {
+				return acme.PeopleUnionPropertyByIdentity(ctx, userOnly, map[string]any{"tags": []string{"a"}})
+			}},
+			{groupsDeletePropertyUrl, "$unset", func() error {
+				return acme.PeopleDeletePropertyByIdentity(ctx, userOnly, []string{"plan"})
+			}},
+		}
+		for _, c := range cases {
+			t.Run(c.operation, func(t *testing.T) {
+				requests := captureRequests(t)
+				require.NoError(t, c.call())
+
+				u, message := onlyMessage(t, *requests)
+				require.Equal(t, c.url, u)
+				require.Contains(t, message, c.operation)
+				require.Equal(t, "$user_id", message["$group_key"])
+				require.Equal(t, "user_123", message["$group_id"])
+				require.Equal(t, "acme", message["$company_id"])
+				require.NotContains(t, message, "$distinct_id")
+			})
+		}
+	})
+
+	t.Run("ForCompany uses the bound company for a user and device identity", func(t *testing.T) {
+		requests := captureRequests(t)
+		acme := mustForCompany(t, hgClient(), "acme")
+
+		require.NoError(t, acme.PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, props))
+
+		_, message := onlyMessage(t, *requests)
+		require.Equal(t, "acme", message["$company_id"])
+		require.Equal(t, "user_123", message["$group_id"])
+	})
+
 	t.Run("legacy distinct id identity uses engage", func(t *testing.T) {
 		requests := captureRequests(t)
 
@@ -591,6 +652,15 @@ func TestIdentityUserProfiles(t *testing.T) {
 
 		// Valid for events (the device id rescues it) but a profile needs the company.
 		err := hgClient().PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, props)
+
+		require.ErrorIs(t, err, ErrCompanyRequired)
+		require.Empty(t, *requests)
+	})
+
+	t.Run("hierarchical user only identity on an unbound client is company required", func(t *testing.T) {
+		requests := captureRequests(t)
+
+		err := hgClient().PeopleDeleteProfileByIdentity(ctx, MixpanelIdentity{UserID: "user_123"})
 
 		require.ErrorIs(t, err, ErrCompanyRequired)
 		require.Empty(t, *requests)

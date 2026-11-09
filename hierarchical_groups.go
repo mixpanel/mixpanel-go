@@ -50,6 +50,10 @@ var (
 // unset, and unset values are never sent. At least one value is required; this is checked when
 // the identity is used.
 //
+// Because an empty UserID means unset, an identity with only CompanyID set (for example one whose
+// UserID was left empty by mistake) is sent as a company-only identity, with no user. If that is
+// not intended, check for empty ids before building one.
+//
 //	mixpanel.MixpanelIdentity{DistinctID: "user_123"}                     // a plain distinct id
 //	mixpanel.MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"} // simplified id merge
 //	mixpanel.MixpanelIdentity{UserID: "user_123", CompanyID: "acme"}      // hierarchical groups
@@ -138,20 +142,18 @@ func (i MixpanelIdentity) FlagContext(groups, customProperties map[string]any) f
 }
 
 // applyTo writes the identity's keys into properties, replacing caller-supplied values for the same
-// keys. A key the identity leaves empty is removed, so properties never carry a stale id.
+// keys. A key the identity leaves empty is not touched, so a caller-supplied value for it is kept.
 func (i MixpanelIdentity) applyTo(properties map[string]any) {
-	setOrDelete(properties, propertyDistinctID, i.DistinctID)
-	setOrDelete(properties, propertyUserID, i.UserID)
-	setOrDelete(properties, propertyCompanyID, i.CompanyID)
-	setOrDelete(properties, propertyDeviceID, i.DeviceID)
+	setIfPresent(properties, propertyDistinctID, i.DistinctID)
+	setIfPresent(properties, propertyUserID, i.UserID)
+	setIfPresent(properties, propertyCompanyID, i.CompanyID)
+	setIfPresent(properties, propertyDeviceID, i.DeviceID)
 }
 
-func setOrDelete(properties map[string]any, key, value string) {
-	if value == "" {
-		delete(properties, key)
-		return
+func setIfPresent(properties map[string]any, key, value string) {
+	if value != "" {
+		properties[key] = value
 	}
-	properties[key] = value
 }
 
 // HierarchicalGroups marks the client as belonging to a project that uses hierarchical groups.
@@ -196,9 +198,9 @@ func HierarchicalGroups() Options {
 //	acme.GroupSet(ctx, "department", "finance", departmentProperties)
 //
 // The copy shares the receiver's http client, credentials, endpoints and feature flag providers;
-// the receiver is unchanged. The ByIdentity people methods use the identity's own company and do
-// not need a bound company; on a bound client they return ErrInvalidIdentity for a user from
-// another company.
+// the receiver is unchanged. The ByIdentity people methods use the identity's own company, or the
+// bound company for an identity with a UserID but no CompanyID; on a bound client they return
+// ErrInvalidIdentity for a user from another company.
 func (a *ApiClient) ForCompany(companyID string) (*ApiClient, error) {
 	if companyID == "" {
 		return nil, fmt.Errorf("%w: ForCompany needs a non-empty company id", ErrInvalidIdentity)
@@ -286,11 +288,11 @@ func (a *ApiClient) CompanyDelete(ctx context.Context) error {
 
 // NewIdentityEvent creates a new mixpanel event for the given identity, for Track or Import.
 //
-// The identity decides distinct_id, $user_id, $company_id and $device_id: it replaces any values
-// for those keys in properties, and drops them from the event when it leaves the matching field
-// empty. Other properties are kept, and properties itself is not modified. An identity without a
-// DistinctID produces an event with no distinct_id; on a hierarchical groups project Mixpanel
-// builds it from $user_id and $company_id.
+// The identity's keys replace any values for the same keys in properties; a key the identity leaves
+// empty is not touched, so a value the caller passed for it is sent as given. Other properties are
+// kept, and properties itself is not modified. An identity without a DistinctID, and properties
+// without a distinct_id, produce an event with no distinct_id; on a hierarchical groups project
+// Mixpanel builds it from $user_id and $company_id.
 //
 // It returns ErrInvalidIdentity when the identity is empty or names a company on a client created
 // without HierarchicalGroups.
@@ -316,8 +318,11 @@ func (a *ApiClient) NewIdentityEvent(name string, identity MixpanelIdentity, pro
 // An identity with a DistinctID is the same as PeopleSet for that distinct id, so on a hierarchical
 // groups client the DistinctID must have the form $company:{company}|$user:{user}. On a
 // hierarchical groups client an identity with a UserID and CompanyID updates the $user_id group
-// profile within that company through /groups. Any other identity cannot name a profile and returns
-// ErrInvalidIdentity; a hierarchical user without a company returns ErrCompanyRequired.
+// profile within that company through /groups. An identity with a UserID but no CompanyID uses the
+// company the client is bound to with ForCompany; on a client without one it returns
+// ErrCompanyRequired. On a bound client an identity whose CompanyID differs from the bound company
+// returns ErrInvalidIdentity. Any other identity cannot name a profile and returns
+// ErrInvalidIdentity.
 //
 // Hierarchical groups projects support set, set once, unset, union, remove and delete, so
 // there is no ByIdentity variant of PeopleIncrement or PeopleAppendListProperty.
@@ -437,9 +442,13 @@ func (a *ApiClient) resolveProfile(identity MixpanelIdentity) (userID, companyID
 			ErrInvalidIdentity, identity)
 	}
 	if identity.CompanyID == "" {
-		// Events accept a user without a company, but a user profile is a group profile within one.
-		return "", "", fmt.Errorf("%w: user profile updates on a hierarchical groups project need the identity's "+
-			"CompanyID, and %s has none", ErrCompanyRequired, identity)
+		// Events accept a user without a company, but a user profile is a group profile within one:
+		// the company the client is bound to, if any.
+		if a.companyID == "" {
+			return "", "", fmt.Errorf("%w: user profile updates on a hierarchical groups project need the identity's "+
+				"CompanyID or a client bound with ForCompany, and %s has none", ErrCompanyRequired, identity)
+		}
+		return identity.UserID, a.companyID, nil
 	}
 	if err := a.requireBoundCompany(identity.CompanyID, identity.String()); err != nil {
 		return "", "", err
