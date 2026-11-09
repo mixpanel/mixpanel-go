@@ -117,11 +117,24 @@ type ApiClient struct {
 	RemoteFlags *flags.RemoteFeatureFlagsProvider
 
 	// How the flags providers were configured, so that HierarchicalGroups can rebuild them
-	// whichever order the options are applied in.
-	localFlagsConfig   flags.LocalFlagsConfig
-	localFlagsTracker  flags.Tracker
-	remoteFlagsConfig  flags.RemoteFlagsConfig
-	remoteFlagsTracker flags.Tracker
+	// whichever order the options are applied in. Held by pointer so ApiClient stays comparable.
+	flagSetup *flagsSetup
+}
+
+// flagsSetup records how the flags providers were configured.
+type flagsSetup struct {
+	localConfig   flags.LocalFlagsConfig
+	localTracker  flags.Tracker
+	remoteConfig  flags.RemoteFlagsConfig
+	remoteTracker flags.Tracker
+}
+
+// ensureFlagsSetup returns the client's flags setup, creating it if needed.
+func (a *ApiClient) ensureFlagsSetup() *flagsSetup {
+	if a.flagSetup == nil {
+		a.flagSetup = &flagsSetup{}
+	}
+	return a.flagSetup
 }
 
 type Options func(mixpanel *ApiClient)
@@ -217,8 +230,9 @@ func WithLocalFlagsAndTracker(config flags.LocalFlagsConfig, builder TrackerBuil
 		if builder == nil {
 			builder = DefaultFlagsExposureTracker
 		}
-		mixpanel.localFlagsConfig = config
-		mixpanel.localFlagsTracker = builder(mixpanel)
+		setup := mixpanel.ensureFlagsSetup()
+		setup.localConfig = config
+		setup.localTracker = builder(mixpanel)
 		mixpanel.buildLocalFlags()
 	}
 }
@@ -230,8 +244,9 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig, builder TrackerBuilder) Opt
 		if builder == nil {
 			builder = DefaultFlagsExposureTracker
 		}
-		mixpanel.remoteFlagsConfig = config
-		mixpanel.remoteFlagsTracker = builder(mixpanel)
+		setup := mixpanel.ensureFlagsSetup()
+		setup.remoteConfig = config
+		setup.remoteTracker = builder(mixpanel)
 		mixpanel.buildRemoteFlags()
 	}
 }
@@ -239,16 +254,18 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig, builder TrackerBuilder) Opt
 // buildLocalFlags creates LocalFlags from the configured settings. The client's HierarchicalGroups
 // option replaces the config's HierarchicalGroups, so the client decides for its providers.
 func (a *ApiClient) buildLocalFlags() {
-	config := a.localFlagsConfig
+	setup := a.ensureFlagsSetup()
+	config := setup.localConfig
 	config.HierarchicalGroups = a.hierarchicalGroups
-	a.LocalFlags = flags.NewLocalFeatureFlagsProvider(a.token, version, config, a.localFlagsTracker)
+	a.LocalFlags = flags.NewLocalFeatureFlagsProvider(a.token, version, config, setup.localTracker)
 }
 
 // buildRemoteFlags creates RemoteFlags from the configured settings, like buildLocalFlags.
 func (a *ApiClient) buildRemoteFlags() {
-	config := a.remoteFlagsConfig
+	setup := a.ensureFlagsSetup()
+	config := setup.remoteConfig
 	config.HierarchicalGroups = a.hierarchicalGroups
-	a.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(a.token, version, config, a.remoteFlagsTracker)
+	a.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(a.token, version, config, setup.remoteTracker)
 }
 
 // NewApiClient create a new mixpanel client

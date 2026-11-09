@@ -15,6 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// ApiClient must stay comparable, as it was before hierarchical groups: this fails to compile otherwise.
+var _ map[ApiClient]struct{}
+
 type capturedRequest struct {
 	url  string // path and fragment, e.g. /groups#group-set
 	body []byte
