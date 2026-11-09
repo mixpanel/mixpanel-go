@@ -107,9 +107,34 @@ type ApiClient struct {
 	serviceAccount *serviceAccount
 	debugHttpCall  *debugHttpCalls
 
+	// hierarchicalGroups is fixed at construction by the HierarchicalGroups option.
+	hierarchicalGroups bool
+	// companyID is set by ForCompany and added to every group profile update.
+	companyID string
+
 	// Feature flags providers
 	LocalFlags  *flags.LocalFeatureFlagsProvider
 	RemoteFlags *flags.RemoteFeatureFlagsProvider
+
+	// How the flags providers were configured, so that HierarchicalGroups can rebuild them
+	// whichever order the options are applied in. Held by pointer so ApiClient stays comparable.
+	flagSetup *flagsSetup
+}
+
+// flagsSetup records how the flags providers were configured.
+type flagsSetup struct {
+	localConfig   flags.LocalFlagsConfig
+	localTracker  flags.Tracker
+	remoteConfig  flags.RemoteFlagsConfig
+	remoteTracker flags.Tracker
+}
+
+// ensureFlagsSetup returns the client's flags setup, creating it if needed.
+func (a *ApiClient) ensureFlagsSetup() *flagsSetup {
+	if a.flagSetup == nil {
+		a.flagSetup = &flagsSetup{}
+	}
+	return a.flagSetup
 }
 
 type Options func(mixpanel *ApiClient)
@@ -181,9 +206,15 @@ func DebugHttpCalls(writer io.Writer) Options {
 
 // DefaultFlagsExposureTracker sends the exposure event synchronously.
 // To send asynchronously, wrap with a goroutine in your own TrackerBuilder.
+//
+// On a HierarchicalGroups client an empty distinctID sends no distinct_id; the event is then
+// attributed by the $user_id and $company_id the provider put in props.
 func DefaultFlagsExposureTracker(client *ApiClient) flags.Tracker {
 	return func(distinctID string, eventName string, props map[string]any) {
 		event := client.NewEvent(eventName, distinctID, props)
+		if distinctID == "" && client.hierarchicalGroups {
+			delete(event.Properties, propertyDistinctID)
+		}
 		_ = client.Track(context.Background(), []*Event{event})
 	}
 }
@@ -199,7 +230,10 @@ func WithLocalFlagsAndTracker(config flags.LocalFlagsConfig, builder TrackerBuil
 		if builder == nil {
 			builder = DefaultFlagsExposureTracker
 		}
-		mixpanel.LocalFlags = flags.NewLocalFeatureFlagsProvider(mixpanel.token, version, config, builder(mixpanel))
+		setup := mixpanel.ensureFlagsSetup()
+		setup.localConfig = config
+		setup.localTracker = builder(mixpanel)
+		mixpanel.buildLocalFlags()
 	}
 }
 
@@ -210,8 +244,28 @@ func WithRemoteFlags(config flags.RemoteFlagsConfig, builder TrackerBuilder) Opt
 		if builder == nil {
 			builder = DefaultFlagsExposureTracker
 		}
-		mixpanel.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(mixpanel.token, version, config, builder(mixpanel))
+		setup := mixpanel.ensureFlagsSetup()
+		setup.remoteConfig = config
+		setup.remoteTracker = builder(mixpanel)
+		mixpanel.buildRemoteFlags()
 	}
+}
+
+// buildLocalFlags creates LocalFlags from the configured settings. The client's HierarchicalGroups
+// option replaces the config's HierarchicalGroups, so the client decides for its providers.
+func (a *ApiClient) buildLocalFlags() {
+	setup := a.ensureFlagsSetup()
+	config := setup.localConfig
+	config.HierarchicalGroups = a.hierarchicalGroups
+	a.LocalFlags = flags.NewLocalFeatureFlagsProvider(a.token, version, config, setup.localTracker)
+}
+
+// buildRemoteFlags creates RemoteFlags from the configured settings, like buildLocalFlags.
+func (a *ApiClient) buildRemoteFlags() {
+	setup := a.ensureFlagsSetup()
+	config := setup.remoteConfig
+	config.HierarchicalGroups = a.hierarchicalGroups
+	a.RemoteFlags = flags.NewRemoteFeatureFlagsProvider(a.token, version, config, setup.remoteTracker)
 }
 
 // NewApiClient create a new mixpanel client
