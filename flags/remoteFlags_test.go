@@ -284,6 +284,45 @@ func TestRemoteFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 		require.NotNil(t, trackedProps["Variant fetch latency (ms)"])
 	})
 
+	t.Run("tags exposure only when context carries the OpenFeature provider marker", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		config := DefaultRemoteFlagsConfig()
+
+		var trackedProps map[string]any
+		tracker := func(distinctID string, eventName string, props map[string]any) {
+			trackedProps = props
+		}
+
+		provider := NewRemoteFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		variantKey := "enabled"
+		response := remoteFlagsResponse{
+			Code: 200,
+			Flags: map[string]*SelectedVariant{
+				"test-flag": {
+					VariantKey:   &variantKey,
+					VariantValue: true,
+				},
+			},
+		}
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags",
+			httpmock.NewJsonResponderOrPanic(200, response))
+
+		ctx := context.Background()
+		_, err := provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123", "$openfeature_provider": true}, true)
+		require.NoError(t, err)
+		require.Equal(t, true, trackedProps["$openfeature_provider"])
+
+		trackedProps = nil
+		_, err = provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, true)
+		require.NoError(t, err)
+		require.NotNil(t, trackedProps)
+		require.NotContains(t, trackedProps, "$openfeature_provider")
+	})
+
 	t.Run("does not track exposure when reportExposure is false", func(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()

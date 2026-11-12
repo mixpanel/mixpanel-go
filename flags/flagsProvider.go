@@ -54,6 +54,10 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 	if latency != nil {
 		properties["Variant fetch latency (ms)"] = float64(latency.Milliseconds())
 	}
+	// SDK-448: the OpenFeature provider marks its evaluations via this context key.
+	if isProvider, _ := flagContext[openFeatureProviderKey].(bool); isProvider {
+		properties[openFeatureProviderKey] = true
+	}
 
 	send := func() { p.tracker(distinctID, exposureEventName, properties) }
 	if p.exposureExecutor != nil {

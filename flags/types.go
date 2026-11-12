@@ -9,6 +9,7 @@ const (
 	goLib = "go"
 
 	exposureEventName       = "$experiment_started"
+	openFeatureProviderKey  = "$openfeature_provider"
 	flagsDefinitionsURLPath = "/flags/definitions"
 	flagsURLPath            = "/flags"
 	defaultFlagsAPIHost     = "api.mixpanel.com"
