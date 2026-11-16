@@ -118,11 +118,42 @@ type VariantOverride struct {
 	Key string `json:"key"`
 }
 
+const (
+	rolloutTypeExperiment = "experiment"
+	experimentStatusDraft = "draft"
+)
+
+// AllocationRange is a half open range of allocation buckets, [Start, End).
+type AllocationRange struct {
+	Start int `json:"start"`
+	End   int `json:"end"`
+}
+
 type Rollout struct {
 	RolloutPercentage     float64            `json:"rollout_percentage"`
 	RuntimeEvaluationRule map[string]any     `json:"runtime_evaluation_rule,omitempty"`
 	VariantOverride       *VariantOverride   `json:"variant_override,omitempty"`
 	VariantSplits         map[string]float64 `json:"variant_splits,omitempty"`
+	// Set on the experiment entries of a multi-experiment flag. Those entries
+	// assign subjects by allocation bucket and ignore RolloutPercentage.
+	Type               string            `json:"type,omitempty"`
+	ExperimentID       *string           `json:"experiment_id,omitempty"`
+	ExperimentStatus   string            `json:"experiment_status,omitempty"`
+	IsExperimentActive *bool             `json:"is_experiment_active,omitempty"`
+	Allocation         []AllocationRange `json:"allocation,omitempty"`
+}
+
+func (rollout *Rollout) isExperiment() bool {
+	return rollout.Type == rolloutTypeExperiment
+}
+
+func (rollout *Rollout) allocationContains(bucket int) bool {
+	for _, allocationRange := range rollout.Allocation {
+		if allocationRange.Start <= bucket && bucket < allocationRange.End {
+			return true
+		}
+	}
+	return false
 }
 
 type FlagTestUsers struct {

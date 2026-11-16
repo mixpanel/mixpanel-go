@@ -218,16 +218,22 @@ func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *Experime
 
 func (p *LocalFeatureFlagsProvider) getAssignedRollout(flag *ExperimentationFlag, contextValue any, flagContext FlagContext) (*Rollout, error) {
 	for i, rollout := range flag.Ruleset.Rollout {
-		var salt string
-		if flag.HashSalt != nil {
-			salt = flag.Key + *flag.HashSalt + fmt.Sprintf("%d", i)
+		var isInRollout bool
+		if rollout.isExperiment() {
+			isInRollout = isContextInExperimentAllocation(flag, contextValue, &rollout)
 		} else {
-			salt = flag.Key + "rollout"
+			var salt string
+			if flag.HashSalt != nil {
+				salt = flag.Key + *flag.HashSalt + fmt.Sprintf("%d", i)
+			} else {
+				salt = flag.Key + "rollout"
+			}
+
+			rolloutHash := normalizedHash(fmt.Sprintf("%v", contextValue), salt)
+			isInRollout = rolloutHash < rollout.RolloutPercentage
 		}
 
-		rolloutHash := normalizedHash(fmt.Sprintf("%v", contextValue), salt)
-
-		if rolloutHash < rollout.RolloutPercentage {
+		if isInRollout {
 			satisfied, err := p.isRuntimeEvaluationSatisfied(&rollout, flagContext)
 			if err != nil {
 				return nil, err
@@ -240,10 +246,33 @@ func (p *LocalFeatureFlagsProvider) getAssignedRollout(flag *ExperimentationFlag
 	return nil, nil
 }
 
+func isContextInExperimentAllocation(flag *ExperimentationFlag, contextValue any, rollout *Rollout) bool {
+	if rollout.ExperimentStatus == experimentStatusDraft {
+		return false
+	}
+	if flag.HashSalt == nil || *flag.HashSalt == "" {
+		return false
+	}
+	bucket := allocationBucket(fmt.Sprintf("%v", contextValue), flag.Key+*flag.HashSalt)
+	return rollout.allocationContains(bucket)
+}
+
+func experimentAttribution(flag *ExperimentationFlag, rollout *Rollout) (*string, *bool) {
+	if rollout.isExperiment() {
+		isExperimentActive := rollout.IsExperimentActive != nil && *rollout.IsExperimentActive
+		return rollout.ExperimentID, &isExperimentActive
+	}
+	return flag.ExperimentID, flag.IsExperimentActive
+}
+
 func (p *LocalFeatureFlagsProvider) getAssignedVariant(flag *ExperimentationFlag, contextValue any, flagKey string, rollout *Rollout) *SelectedVariant {
+	experimentID, isExperimentActive := experimentAttribution(flag, rollout)
+
 	if rollout.VariantOverride != nil {
 		variant := p.getMatchingVariant(rollout.VariantOverride.Key, flag, false)
 		if variant != nil {
+			variant.ExperimentID = experimentID
+			variant.IsExperimentActive = isExperimentActive
 			return variant
 		}
 	}
@@ -252,8 +281,18 @@ func (p *LocalFeatureFlagsProvider) getAssignedVariant(flag *ExperimentationFlag
 	if flag.HashSalt != nil {
 		storedSalt = *flag.HashSalt
 	}
-	salt := flagKey + storedSalt + "variant"
-	variantHash := normalizedHash(fmt.Sprintf("%v", contextValue), salt)
+	var variantHash float64
+	if rollout.isExperiment() {
+		rolloutExperimentID := ""
+		if rollout.ExperimentID != nil {
+			rolloutExperimentID = *rollout.ExperimentID
+		}
+		salt := flagKey + storedSalt + rolloutExperimentID + "variant"
+		variantHash = mixedNormalizedHash(fmt.Sprintf("%v", contextValue), salt)
+	} else {
+		salt := flagKey + storedSalt + "variant"
+		variantHash = normalizedHash(fmt.Sprintf("%v", contextValue), salt)
+	}
 
 	variants := make([]Variant, len(flag.Ruleset.Variants))
 	copy(variants, flag.Ruleset.Variants)
@@ -286,8 +325,8 @@ func (p *LocalFeatureFlagsProvider) getAssignedVariant(flag *ExperimentationFlag
 	return &SelectedVariant{
 		VariantKey:         &selected.Key,
 		VariantValue:       selected.Value,
-		ExperimentID:       flag.ExperimentID,
-		IsExperimentActive: flag.IsExperimentActive,
+		ExperimentID:       experimentID,
+		IsExperimentActive: isExperimentActive,
 	}
 }
 
