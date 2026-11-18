@@ -47,9 +47,16 @@ const (
 // Track calls the Track endpoint
 // For server side we recommend Import func
 // more info here: https://developer.mixpanel.com/reference/track-event#when-to-use-track-vs-import
+//
+// On a hierarchical groups client it returns ErrInvalidIdentity, and sends nothing, for an event
+// whose distinct id has the form $company:{company}|$user:{user} and conflicts with its
+// $company_id or $user_id property; see HierarchicalGroups.
 func (m *ApiClient) Track(ctx context.Context, events []*Event) error {
 	if len(events) > MaxTrackEvents {
 		return fmt.Errorf("max track events is %d", MaxTrackEvents)
+	}
+	if err := m.requireConsistentEvents(events); err != nil {
+		return err
 	}
 
 	query := url.Values{}
@@ -127,9 +134,14 @@ func (e ImportGenericError) Error() string {
 // Import calls the Import api
 // https://developer.mixpanel.com/reference/import-events
 // Need to provide a service account or project token to the client
+//
+// On a hierarchical groups client events are checked as in Track.
 func (a *ApiClient) Import(ctx context.Context, events []*Event, options ImportOptions) (*ImportSuccess, error) {
 	if len(events) > MaxImportEvents {
 		return nil, fmt.Errorf("max import events is %d", MaxImportEvents)
+	}
+	if err := a.requireConsistentEvents(events); err != nil {
+		return nil, err
 	}
 
 	values := url.Values{}

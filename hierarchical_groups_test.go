@@ -1136,3 +1136,151 @@ func TestHierarchicalGroupsFlagExposure(t *testing.T) {
 		require.Equal(t, "", *gotDistinctID)
 	})
 }
+
+func TestHierarchicalGroupsRefusesConflictingCombinedDistinctID(t *testing.T) {
+	ctx := context.Background()
+	id := "$company:c6|$user:u6"
+
+	send := func(t *testing.T, mp *ApiClient, props map[string]any) ([]capturedRequest, error, error) {
+		requests := captureRequests(t)
+		trackErr := mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, props)})
+		_, importErr := mp.Import(ctx, []*Event{mp.NewEvent("Signup", id, props)}, ImportOptions{})
+		return *requests, trackErr, importErr
+	}
+
+	for _, tc := range []struct {
+		name    string
+		props   map[string]any
+		message string
+	}{
+		{"company differs", map[string]any{"$company_id": "zz6"},
+			"distinct_id $company:c6|$user:u6 names company c6, but $company_id is zz6. Nothing sent"},
+		{"user differs", map[string]any{"$user_id": "other"},
+			"distinct_id $company:c6|$user:u6 names user u6, but $user_id is other. Nothing sent"},
+		{"integer company differs", map[string]any{"$company_id": 7},
+			"distinct_id $company:c6|$user:u6 names company c6, but $company_id is 7. Nothing sent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests, trackErr, importErr := send(t, hgClient(), tc.props)
+			require.Empty(t, requests)
+			for _, err := range []error{trackErr, importErr} {
+				require.ErrorIs(t, err, ErrInvalidIdentity)
+				require.ErrorContains(t, err, tc.message)
+			}
+		})
+	}
+
+	t.Run("a conflict in any event of a batch sends nothing", func(t *testing.T) {
+		requests := captureRequests(t)
+		mp := hgClient()
+		err := mp.Track(ctx, []*Event{
+			mp.NewEvent("Signup", id, nil),
+			mp.NewEvent("Signup", id, map[string]any{"$company_id": "zz6"}),
+		})
+		require.ErrorIs(t, err, ErrInvalidIdentity)
+		require.Empty(t, *requests)
+	})
+
+	t.Run("matching values are sent unchanged", func(t *testing.T) {
+		mp := hgClient()
+		for _, props := range []map[string]any{
+			{"$company_id": "c6", "$user_id": "u6", "plan": "pro"},
+			{"plan": "pro"},
+		} {
+			requests, trackErr, importErr := send(t, mp, props)
+			require.NoError(t, trackErr)
+			require.NoError(t, importErr)
+			require.Len(t, requests, 2)
+			legacyRequests, _, _ := send(t, legacyClient(), props)
+			require.Equal(t, legacyRequests, requests)
+		}
+	})
+
+	t.Run("matching integer and JSON number ids are sent", func(t *testing.T) {
+		requests := captureRequests(t)
+		mp := hgClient()
+		event, err := mp.NewEventFromJson(map[string]any{"event": "Signup", "properties": map[string]any{
+			"distinct_id": "$company:3190317|$user:3190316", "$company_id": float64(3190317), "$user_id": 3190316,
+		}})
+		require.NoError(t, err)
+		require.NoError(t, mp.Track(ctx, []*Event{event}))
+		require.Len(t, *requests, 1)
+	})
+
+	t.Run("a plain distinct id is sent as given", func(t *testing.T) {
+		requests := captureRequests(t)
+		mp := hgClient()
+		require.NoError(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", "user_123", map[string]any{"$company_id": "zz6"})}))
+		require.Len(t, *requests, 1)
+	})
+
+	t.Run("a legacy client sends a conflicting event unchanged", func(t *testing.T) {
+		requests, trackErr, importErr := send(t, legacyClient(), map[string]any{"$company_id": "zz6"})
+		require.NoError(t, trackErr)
+		require.NoError(t, importErr)
+		require.Len(t, requests, 2)
+		require.Contains(t, string(requests[0].body), `"$company_id":"zz6"`)
+	})
+}
+
+func TestHierarchicalGroupsRefusesWhitespaceIDs(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("identity with a whitespace-only user or company", func(t *testing.T) {
+		for _, identity := range []MixpanelIdentity{
+			{UserID: "  ", CompanyID: "acme"},
+			{UserID: "user_123", CompanyID: " "},
+			{CompanyID: "\t"},
+		} {
+			for _, mp := range []*ApiClient{hgClient(), legacyClient()} {
+				_, err := mp.NewIdentityEvent("Signup", identity, nil)
+				require.ErrorIs(t, err, ErrInvalidIdentity, identity.String())
+				require.ErrorContains(t, err, "only whitespace")
+			}
+			requests := captureRequests(t)
+			require.ErrorIs(t, hgClient().PeopleSetByIdentity(ctx, identity, map[string]any{"plan": "pro"}), ErrInvalidIdentity)
+			require.Empty(t, *requests)
+		}
+	})
+
+	t.Run("identity with ids that are not blank is unchanged", func(t *testing.T) {
+		event, err := hgClient().NewIdentityEvent("Signup", MixpanelIdentity{UserID: " user_123 ", CompanyID: "acme"}, nil)
+		require.NoError(t, err)
+		require.Equal(t, " user_123 ", event.Properties["$user_id"])
+	})
+
+	t.Run("ForCompany with a whitespace-only company", func(t *testing.T) {
+		for _, mp := range []*ApiClient{hgClient(), legacyClient()} {
+			bound, err := mp.ForCompany("  ")
+			require.ErrorIs(t, err, ErrInvalidIdentity)
+			require.Nil(t, bound)
+		}
+		bound, err := hgClient().ForCompany(" acme ")
+		require.NoError(t, err)
+		require.Equal(t, " acme ", bound.companyID)
+	})
+
+	t.Run("combined distinct id with a whitespace-only part", func(t *testing.T) {
+		for _, id := range []string{"$company: |$user:u", "$company:acme|$user:  ", "$company: |$user: "} {
+			requests := captureRequests(t)
+			mp := hgClient()
+			require.ErrorIs(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, nil)}), ErrInvalidIdentity, id)
+			_, err := mp.Import(ctx, []*Event{mp.NewEvent("Signup", id, nil)}, ImportOptions{})
+			require.ErrorIs(t, err, ErrInvalidIdentity, id)
+			err = mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(id, map[string]any{"plan": "pro"})})
+			require.ErrorIs(t, err, ErrInvalidIdentity, id)
+			require.ErrorContains(t, err, "only whitespace")
+			require.ErrorIs(t, mp.PeopleDeleteProfile(ctx, id, false), ErrInvalidIdentity, id)
+			require.Empty(t, *requests)
+		}
+	})
+
+	t.Run("a legacy client sends a whitespace combined distinct id unchanged", func(t *testing.T) {
+		requests := captureRequests(t)
+		mp := legacyClient()
+		id := "$company: |$user: "
+		require.NoError(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, nil)}))
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(id, map[string]any{"plan": "pro"})}))
+		require.Len(t, *requests, 2)
+	})
+}

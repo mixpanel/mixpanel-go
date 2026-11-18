@@ -2,6 +2,7 @@ package mixpanel
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -47,8 +48,9 @@ var (
 //
 // Mixpanel resolves an identity from whichever of distinct_id, $user_id, $company_id and
 // $device_id an event carries, so any combination may be set. An empty string leaves a value
-// unset, and unset values are never sent. At least one value is required; this is checked when
-// the identity is used.
+// unset, and unset values are never sent. At least one value is required, and a UserID or
+// CompanyID made only of whitespace is refused; both are checked when the identity is used and
+// return ErrInvalidIdentity.
 //
 // Because an empty UserID means unset, an identity with only CompanyID set (for example one whose
 // UserID was left empty by mistake) is sent as a company-only identity, with no user. If that is
@@ -171,7 +173,10 @@ func setIfPresent(properties map[string]any, key, value string) {
 // distinct id. Group profile updates require a company: bind one with ForCompany, or they return
 // ErrCompanyRequired.
 //
-// Events are sent unchanged.
+// Events are sent unchanged, except that Track and Import return ErrInvalidIdentity, and send
+// nothing, for an event whose distinct id has the form $company:{company}|$user:{user} while its
+// $company_id or $user_id property names a different company or user, or whose company or user is
+// only whitespace.
 //
 // Feature flags providers configured on the client, before or after this option, attribute
 // exposure events by the context's $company_id and $user_id as well as by distinct_id.
@@ -201,9 +206,15 @@ func HierarchicalGroups() Options {
 // the receiver is unchanged. The ByIdentity people methods use the identity's own company, or the
 // bound company for an identity with a UserID but no CompanyID; on a bound client they return
 // ErrInvalidIdentity for a user from another company.
+//
+// It returns ErrInvalidIdentity for an empty company id or one made only of whitespace.
 func (a *ApiClient) ForCompany(companyID string) (*ApiClient, error) {
 	if companyID == "" {
 		return nil, fmt.Errorf("%w: ForCompany needs a non-empty company id", ErrInvalidIdentity)
+	}
+	if isBlank(companyID) {
+		return nil, fmt.Errorf("%w: ForCompany needs a company id that is not only whitespace, got %q. Nothing sent",
+			ErrInvalidIdentity, companyID)
 	}
 	bound := *a
 	bound.companyID = companyID
@@ -294,8 +305,8 @@ func (a *ApiClient) CompanyDelete(ctx context.Context) error {
 // without a distinct_id, produce an event with no distinct_id; on a hierarchical groups project
 // Mixpanel builds it from $user_id and $company_id.
 //
-// It returns ErrInvalidIdentity when the identity is empty or names a company on a client created
-// without HierarchicalGroups.
+// It returns ErrInvalidIdentity when the identity is empty, has a UserID or CompanyID made only of
+// whitespace, or names a company on a client created without HierarchicalGroups.
 func (a *ApiClient) NewIdentityEvent(name string, identity MixpanelIdentity, properties map[string]any) (*Event, error) {
 	if err := a.requireIdentityMatchesProject(identity); err != nil {
 		return nil, err
@@ -411,6 +422,10 @@ func (a *ApiClient) requireIdentityMatchesProject(identity MixpanelIdentity) err
 	if identity.isEmpty() {
 		return fmt.Errorf("%w: an identity needs at least one of DistinctID, UserID, CompanyID or DeviceID", ErrInvalidIdentity)
 	}
+	if isBlank(identity.UserID) || isBlank(identity.CompanyID) {
+		return fmt.Errorf("%w: %s has a UserID or CompanyID that is only whitespace (UserID %q, CompanyID %q). "+
+			"Nothing sent", ErrInvalidIdentity, identity, identity.UserID, identity.CompanyID)
+	}
 	if identity.IsHierarchical() && !a.hierarchicalGroups {
 		return fmt.Errorf("%w: %s requires a hierarchical groups client: mixpanel.NewApiClient(token, mixpanel.HierarchicalGroups())",
 			ErrInvalidIdentity, identity)
@@ -469,7 +484,8 @@ func (a *ApiClient) requireBoundCompany(companyID, described string) error {
 
 // parseCombinedDistinctID splits a distinct id of the form $company:{company}|$user:{user} into its
 // user and company. The company ends at the first |$user:. ok is false when the distinct id does
-// not have that form or either part is empty.
+// not have that form or either part is empty. A part made only of whitespace is returned as is;
+// requireNonBlankCombined refuses it.
 func parseCombinedDistinctID(distinctID string) (userID, companyID string, ok bool) {
 	if !strings.HasPrefix(distinctID, combinedCompanyPrefix) {
 		return "", "", false
@@ -492,10 +508,86 @@ func (a *ApiClient) hierarchicalProfile(distinctID string) (userID, companyID st
 			"ByIdentity method, or a distinct id of the form $company:{company}|$user:{user}. Nothing sent",
 			ErrInvalidIdentity, distinctID)
 	}
+	if err := requireNonBlankCombined(distinctID, userID, companyID); err != nil {
+		return "", "", err
+	}
 	if err := a.requireBoundCompany(companyID, strconv.Quote(distinctID)); err != nil {
 		return "", "", err
 	}
 	return userID, companyID, nil
+}
+
+// requireNonBlankCombined refuses a combined distinct id whose user or company is only whitespace,
+// which Mixpanel would otherwise store as a separate, junk user.
+func requireNonBlankCombined(distinctID, userID, companyID string) error {
+	if isBlank(companyID) || isBlank(userID) {
+		return fmt.Errorf("%w: distinct_id %q names a company or user that is only whitespace. Nothing sent",
+			ErrInvalidIdentity, distinctID)
+	}
+	return nil
+}
+
+// requireConsistentEvents refuses, on a hierarchical groups client, an event whose distinct_id has
+// the form $company:{company}|$user:{user} but whose $company_id or $user_id property names another
+// company or user, or whose company or user is only whitespace. Mixpanel would resolve such an
+// event by the property and silently drop the user. Other distinct ids are sent as given.
+func (a *ApiClient) requireConsistentEvents(events []*Event) error {
+	if !a.hierarchicalGroups {
+		return nil
+	}
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		distinctID, isString := event.Properties[propertyDistinctID].(string)
+		if !isString {
+			continue
+		}
+		userID, companyID, ok := parseCombinedDistinctID(distinctID)
+		if !ok {
+			continue
+		}
+		if err := requireNonBlankCombined(distinctID, userID, companyID); err != nil {
+			return err
+		}
+		for _, part := range []struct{ name, key, want string }{
+			{"company", propertyCompanyID, companyID},
+			{"user", propertyUserID, userID},
+		} {
+			value, present := event.Properties[part.key]
+			if !present || value == nil {
+				continue
+			}
+			if got := idString(value); got != part.want {
+				return fmt.Errorf("%w: distinct_id %s names %s %s, but %s is %s. Nothing sent",
+					ErrInvalidIdentity, distinctID, part.name, part.want, part.key, got)
+			}
+		}
+	}
+	return nil
+}
+
+// idString returns the string form of an id property value, as Mixpanel stores it. Integral
+// floats, such as numbers decoded from JSON, have no exponent or fraction.
+func idString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case json.Number:
+		return v.String()
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+// isBlank reports whether id is non-empty and made only of whitespace. An empty id keeps its own
+// handling.
+func isBlank(id string) bool {
+	return id != "" && strings.TrimSpace(id) == ""
 }
 
 // groupCompanyID returns the company to send with a group profile update, or ErrCompanyRequired
