@@ -1223,6 +1223,97 @@ func TestHierarchicalGroupsRefusesConflictingCombinedDistinctID(t *testing.T) {
 	})
 }
 
+func TestHierarchicalGroupsRefusesConflictingIdentityDistinctID(t *testing.T) {
+	ctx := context.Background()
+	props := map[string]any{"plan": "pro"}
+
+	profileCalls := func(mp *ApiClient, identity MixpanelIdentity) map[string]func() error {
+		return map[string]func() error{
+			"set":      func() error { return mp.PeopleSetByIdentity(ctx, identity, props) },
+			"set once": func() error { return mp.PeopleSetOnceByIdentity(ctx, identity, props) },
+			"unset":    func() error { return mp.PeopleDeletePropertyByIdentity(ctx, identity, []string{"plan"}) },
+			"union": func() error {
+				return mp.PeopleUnionPropertyByIdentity(ctx, identity, map[string]any{"tags": []string{"a"}})
+			},
+			"remove": func() error { return mp.PeopleRemoveListPropertyByIdentity(ctx, identity, map[string]any{"tags": "a"}) },
+			"delete": func() error { return mp.PeopleDeleteProfileByIdentity(ctx, identity) },
+		}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		identity MixpanelIdentity
+		message  string
+	}{
+		{"user differs", MixpanelIdentity{DistinctID: "$company:acme|$user:old", UserID: "new", CompanyID: "acme"},
+			"distinct_id $company:acme|$user:old names user old, but user_id is new. Nothing sent"},
+		{"company differs", MixpanelIdentity{DistinctID: "$company:acme|$user:u1", UserID: "u1", CompanyID: "other"},
+			"distinct_id $company:acme|$user:u1 names company acme, but company_id is other. Nothing sent"},
+		{"user differs without a company", MixpanelIdentity{DistinctID: "$company:acme|$user:old", UserID: "new"},
+			"distinct_id $company:acme|$user:old names user old, but user_id is new. Nothing sent"},
+		{"company differs without a user", MixpanelIdentity{DistinctID: "$company:acme|$user:u1", CompanyID: "other"},
+			"distinct_id $company:acme|$user:u1 names company acme, but company_id is other. Nothing sent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := captureRequests(t)
+			mp := hgClient()
+			for op, call := range profileCalls(mp, tc.identity) {
+				err := call()
+				require.ErrorIs(t, err, ErrInvalidIdentity, op)
+				require.ErrorContains(t, err, tc.message, op)
+			}
+			for op, call := range profileCalls(mustForCompany(t, hgClient(), "acme"), tc.identity) {
+				require.ErrorIs(t, call(), ErrInvalidIdentity, op)
+			}
+
+			event, err := mp.NewIdentityEvent("Signup", tc.identity, props)
+			require.ErrorIs(t, err, ErrInvalidIdentity)
+			require.ErrorContains(t, err, tc.message)
+			require.Nil(t, event)
+			require.Empty(t, *requests)
+		})
+	}
+
+	t.Run("agreeing identities are unchanged", func(t *testing.T) {
+		for _, identity := range []MixpanelIdentity{
+			{DistinctID: "$company:acme|$user:u1", UserID: "u1", CompanyID: "acme"},
+			{DistinctID: "$company:3190317|$user:3190316", UserID: "3190316", CompanyID: "3190317"},
+			{DistinctID: "$company:acme|$user:u1", UserID: "u1"},
+			{DistinctID: "$company:acme|$user:u1"},
+			{DistinctID: "user_123", UserID: "u1", CompanyID: "acme"},
+		} {
+			requests := captureRequests(t)
+			mp := hgClient()
+			event, err := mp.NewIdentityEvent("Signup", identity, props)
+			require.NoError(t, err, identity.String())
+			require.NoError(t, mp.Track(ctx, []*Event{event}), identity.String())
+			require.Len(t, *requests, 1, identity.String())
+		}
+		for _, identity := range []MixpanelIdentity{
+			{DistinctID: "$company:acme|$user:u1", UserID: "u1", CompanyID: "acme"},
+			{DistinctID: "$company:3190317|$user:3190316", UserID: "3190316", CompanyID: "3190317"},
+			{DistinctID: "$company:acme|$user:u1", CompanyID: "acme"},
+		} {
+			for op, call := range profileCalls(hgClient(), identity) {
+				requests := captureRequests(t)
+				require.NoError(t, call(), op, identity.String())
+				require.Len(t, *requests, 1, op, identity.String())
+			}
+		}
+	})
+
+	t.Run("a legacy client is unchanged", func(t *testing.T) {
+		requests := captureRequests(t)
+		mp := legacyClient()
+		require.NoError(t, mp.PeopleSetByIdentity(ctx, MixpanelIdentity{DistinctID: "$company:acme|$user:old", UserID: "new"}, props))
+		require.NoError(t, mp.PeopleDeleteProfileByIdentity(ctx, MixpanelIdentity{DistinctID: "$company:acme|$user:old", UserID: "new"}))
+		event, err := mp.NewIdentityEvent("Signup", MixpanelIdentity{DistinctID: "$company:acme|$user:old", UserID: "new"}, props)
+		require.NoError(t, err)
+		require.NoError(t, mp.Track(ctx, []*Event{event}))
+		require.Len(t, *requests, 3)
+	})
+}
+
 func TestHierarchicalGroupsRefusesWhitespaceIDs(t *testing.T) {
 	ctx := context.Background()
 

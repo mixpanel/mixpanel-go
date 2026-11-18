@@ -306,7 +306,10 @@ func (a *ApiClient) CompanyDelete(ctx context.Context) error {
 // Mixpanel builds it from $user_id and $company_id.
 //
 // It returns ErrInvalidIdentity when the identity is empty, has a UserID or CompanyID made only of
-// whitespace, or names a company on a client created without HierarchicalGroups.
+// whitespace, or names a company on a client created without HierarchicalGroups. On a hierarchical
+// groups client it also returns ErrInvalidIdentity for a DistinctID of the form
+// $company:{company}|$user:{user} that names a company or user other than the identity's CompanyID
+// or UserID.
 func (a *ApiClient) NewIdentityEvent(name string, identity MixpanelIdentity, properties map[string]any) (*Event, error) {
 	if err := a.requireIdentityMatchesProject(identity); err != nil {
 		return nil, err
@@ -333,7 +336,9 @@ func (a *ApiClient) NewIdentityEvent(name string, identity MixpanelIdentity, pro
 // company the client is bound to with ForCompany; on a client without one it returns
 // ErrCompanyRequired. On a bound client an identity whose CompanyID differs from the bound company
 // returns ErrInvalidIdentity. Any other identity cannot name a profile and returns
-// ErrInvalidIdentity.
+// ErrInvalidIdentity. On a hierarchical groups client an identity whose DistinctID names a company
+// or user other than its own CompanyID or UserID returns ErrInvalidIdentity, rather than updating
+// the profile the DistinctID names.
 //
 // Hierarchical groups projects support set, set once, unset, union, remove and delete, so
 // there is no ByIdentity variant of PeopleIncrement or PeopleAppendListProperty.
@@ -429,6 +434,61 @@ func (a *ApiClient) requireIdentityMatchesProject(identity MixpanelIdentity) err
 	if identity.IsHierarchical() && !a.hierarchicalGroups {
 		return fmt.Errorf("%w: %s requires a hierarchical groups client: mixpanel.NewApiClient(token, mixpanel.HierarchicalGroups())",
 			ErrInvalidIdentity, identity)
+	}
+	return a.requireIdentityDistinctIDAgrees(identity)
+}
+
+// requireIdentityDistinctIDAgrees refuses, on a hierarchical groups client, an identity whose
+// DistinctID has the form $company:{company}|$user:{user} but names a company or user that differs
+// from the identity's own CompanyID or UserID. Events resolve such an identity by UserID and
+// CompanyID while profile updates would follow the DistinctID, so neither is chosen. An identity
+// with only a DistinctID, or only a UserID or CompanyID, is unchanged.
+func (a *ApiClient) requireIdentityDistinctIDAgrees(identity MixpanelIdentity) error {
+	if !a.hierarchicalGroups || (identity.UserID == "" && identity.CompanyID == "") {
+		return nil
+	}
+	userID, companyID, ok := parseCombinedDistinctID(identity.DistinctID)
+	if !ok {
+		return nil
+	}
+	if err := requireNonBlankCombined(identity.DistinctID, userID, companyID); err != nil {
+		return err
+	}
+	return requireCombinedAgrees(identity.DistinctID, userID, companyID,
+		idClaim{"company_id", optionalID(identity.CompanyID)}, idClaim{"user_id", optionalID(identity.UserID)})
+}
+
+// idClaim is a value given for one part of a combined distinct id, and what an error calls it. A
+// nil value is not compared.
+type idClaim struct {
+	field string
+	value any
+}
+
+func optionalID(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
+}
+
+// requireCombinedAgrees refuses a combined distinct id whose company or user differs from the
+// value claimed for it. Values are compared in their string form, so 42 matches "42".
+func requireCombinedAgrees(distinctID, userID, companyID string, company, user idClaim) error {
+	for _, part := range []struct {
+		name, want string
+		claim      idClaim
+	}{
+		{"company", companyID, company},
+		{"user", userID, user},
+	} {
+		if part.claim.value == nil {
+			continue
+		}
+		if got := idString(part.claim.value); got != part.want {
+			return fmt.Errorf("%w: distinct_id %s names %s %s, but %s is %s. Nothing sent",
+				ErrInvalidIdentity, distinctID, part.name, part.want, part.claim.field, got)
+		}
 	}
 	return nil
 }
@@ -552,18 +612,10 @@ func (a *ApiClient) requireConsistentEvents(events []*Event) error {
 		if err := requireNonBlankCombined(distinctID, userID, companyID); err != nil {
 			return err
 		}
-		for _, part := range []struct{ name, key, want string }{
-			{"company", propertyCompanyID, companyID},
-			{"user", propertyUserID, userID},
-		} {
-			value, present := event.Properties[part.key]
-			if !present || value == nil {
-				continue
-			}
-			if got := idString(value); got != part.want {
-				return fmt.Errorf("%w: distinct_id %s names %s %s, but %s is %s. Nothing sent",
-					ErrInvalidIdentity, distinctID, part.name, part.want, part.key, got)
-			}
+		if err := requireCombinedAgrees(distinctID, userID, companyID,
+			idClaim{propertyCompanyID, event.Properties[propertyCompanyID]},
+			idClaim{propertyUserID, event.Properties[propertyUserID]}); err != nil {
+			return err
 		}
 	}
 	return nil
