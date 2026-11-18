@@ -1275,6 +1275,57 @@ func TestHierarchicalGroupsRefusesWhitespaceIDs(t *testing.T) {
 		}
 	})
 
+	t.Run("combined distinct id with an empty part", func(t *testing.T) {
+		for _, tc := range []struct{ id, part string }{
+			{"$company:|$user:u", "company"},
+			{"$company:c|$user:", "user"},
+			{"$company:|$user:", "company"},
+		} {
+			requests := captureRequests(t)
+			mp := hgClient()
+			err := mp.Track(ctx, []*Event{mp.NewEvent("Signup", tc.id, nil)})
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			require.ErrorContains(t, err, "names a "+tc.part+" that is empty or only whitespace")
+			_, err = mp.Import(ctx, []*Event{mp.NewEvent("Signup", tc.id, nil)}, ImportOptions{})
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			event, err := mp.NewIdentityEvent("Signup", MixpanelIdentity{DistinctID: tc.id}, nil)
+			require.NoError(t, err)
+			require.ErrorIs(t, mp.Track(ctx, []*Event{event}), ErrInvalidIdentity, tc.id)
+			err = mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(tc.id, map[string]any{"plan": "pro"})})
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			require.ErrorContains(t, err, "names a "+tc.part+" that is empty or only whitespace")
+			require.ErrorIs(t, mp.PeopleSetOnce(ctx, []*PeopleProperties{NewPeopleProperties(tc.id, map[string]any{"plan": "pro"})}), ErrInvalidIdentity, tc.id)
+			require.ErrorIs(t, mp.PeopleDeleteProperty(ctx, tc.id, []string{"plan"}), ErrInvalidIdentity, tc.id)
+			require.ErrorIs(t, mp.PeopleUnionProperty(ctx, tc.id, map[string]any{"tags": []string{"a"}}), ErrInvalidIdentity, tc.id)
+			require.ErrorIs(t, mp.PeopleRemoveListProperty(ctx, tc.id, map[string]any{"tags": "a"}), ErrInvalidIdentity, tc.id)
+			require.ErrorIs(t, mp.PeopleDeleteProfile(ctx, tc.id, false), ErrInvalidIdentity, tc.id)
+			require.ErrorIs(t, mp.PeopleSetByIdentity(ctx, MixpanelIdentity{DistinctID: tc.id}, map[string]any{"plan": "pro"}), ErrInvalidIdentity, tc.id)
+			require.Empty(t, *requests, tc.id)
+		}
+	})
+
+	t.Run("valid and non-combined distinct ids are still sent", func(t *testing.T) {
+		for _, id := range []string{"$company:c|$user:u", "user_123", "$device:abc", "$company:acme", " $company:|$user:u"} {
+			requests := captureRequests(t)
+			mp := hgClient()
+			require.NoError(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, nil)}), id)
+			require.Len(t, *requests, 1, id)
+			require.Contains(t, string((*requests)[0].body), `"distinct_id":"`+id+`"`, id)
+		}
+	})
+
+	t.Run("a legacy client sends a combined distinct id with an empty part unchanged", func(t *testing.T) {
+		for _, id := range []string{"$company:|$user:u", "$company:c|$user:", "$company:|$user:"} {
+			requests := captureRequests(t)
+			mp := legacyClient()
+			require.NoError(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, nil)}), id)
+			_, err := mp.Import(ctx, []*Event{mp.NewEvent("Signup", id, nil)}, ImportOptions{})
+			require.NoError(t, err, id)
+			require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(id, map[string]any{"plan": "pro"})}), id)
+			require.Len(t, *requests, 3, id)
+		}
+	})
+
 	t.Run("a legacy client sends a whitespace combined distinct id unchanged", func(t *testing.T) {
 		requests := captureRequests(t)
 		mp := legacyClient()

@@ -176,7 +176,7 @@ func setIfPresent(properties map[string]any, key, value string) {
 // Events are sent unchanged, except that Track and Import return ErrInvalidIdentity, and send
 // nothing, for an event whose distinct id has the form $company:{company}|$user:{user} while its
 // $company_id or $user_id property names a different company or user, or whose company or user is
-// only whitespace.
+// empty or only whitespace.
 //
 // Feature flags providers configured on the client, before or after this option, attribute
 // exposure events by the context's $company_id and $user_id as well as by distinct_id.
@@ -484,14 +484,14 @@ func (a *ApiClient) requireBoundCompany(companyID, described string) error {
 
 // parseCombinedDistinctID splits a distinct id of the form $company:{company}|$user:{user} into its
 // user and company. The company ends at the first |$user:. ok is false when the distinct id does
-// not have that form or either part is empty. A part made only of whitespace is returned as is;
+// not have that form. A part that is empty or made only of whitespace is returned as is;
 // requireNonBlankCombined refuses it.
 func parseCombinedDistinctID(distinctID string) (userID, companyID string, ok bool) {
 	if !strings.HasPrefix(distinctID, combinedCompanyPrefix) {
 		return "", "", false
 	}
 	companyID, userID, found := strings.Cut(strings.TrimPrefix(distinctID, combinedCompanyPrefix), combinedUserSeparator)
-	if !found || companyID == "" || userID == "" {
+	if !found {
 		return "", "", false
 	}
 	return userID, companyID, true
@@ -517,20 +517,22 @@ func (a *ApiClient) hierarchicalProfile(distinctID string) (userID, companyID st
 	return userID, companyID, nil
 }
 
-// requireNonBlankCombined refuses a combined distinct id whose user or company is only whitespace,
-// which Mixpanel would otherwise store as a separate, junk user.
+// requireNonBlankCombined refuses a combined distinct id whose user or company is empty or only
+// whitespace, which Mixpanel would otherwise store as a separate, junk user.
 func requireNonBlankCombined(distinctID, userID, companyID string) error {
-	if isBlank(companyID) || isBlank(userID) {
-		return fmt.Errorf("%w: distinct_id %q names a company or user that is only whitespace. Nothing sent",
-			ErrInvalidIdentity, distinctID)
+	for _, part := range []struct{ name, id string }{{"company", companyID}, {"user", userID}} {
+		if strings.TrimSpace(part.id) == "" {
+			return fmt.Errorf("%w: distinct_id %q names a %s that is empty or only whitespace. Nothing sent",
+				ErrInvalidIdentity, distinctID, part.name)
+		}
 	}
 	return nil
 }
 
 // requireConsistentEvents refuses, on a hierarchical groups client, an event whose distinct_id has
 // the form $company:{company}|$user:{user} but whose $company_id or $user_id property names another
-// company or user, or whose company or user is only whitespace. Mixpanel would resolve such an
-// event by the property and silently drop the user. Other distinct ids are sent as given.
+// company or user, or whose company or user is empty or only whitespace. Mixpanel would resolve
+// such an event by the property and silently drop the user. Other distinct ids are sent as given.
 func (a *ApiClient) requireConsistentEvents(events []*Event) error {
 	if !a.hierarchicalGroups {
 		return nil
