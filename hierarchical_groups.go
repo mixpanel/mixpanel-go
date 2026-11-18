@@ -499,11 +499,19 @@ func (a *ApiClient) hierarchicalProfile(distinctID string) (userID, companyID st
 }
 
 // groupCompanyID returns the company to send with a group profile update, or ErrCompanyRequired
-// on a hierarchical groups client with no company bound.
+// on a hierarchical groups client with no company bound. On a hierarchical groups client a
+// $company_id group whose id differs from the bound company returns ErrInvalidIdentity: Mixpanel
+// applies such an update to the top-level $company_id, so it would change the bound company's
+// profile instead.
 func (a *ApiClient) groupCompanyID(groupKey, groupID string) (string, error) {
 	if a.hierarchicalGroups && a.companyID == "" {
 		return "", fmt.Errorf("%w: group profile updates for hierarchical groups projects require a company. "+
 			"Use ForCompany(companyID) to send them. Nothing sent for group %s=%s", ErrCompanyRequired, groupKey, groupID)
+	}
+	if a.hierarchicalGroups && groupKey == propertyCompanyID && groupID != a.companyID {
+		return "", fmt.Errorf("%w: group $company_id=%s does not match company %s. A company profile is updated "+
+			"through ForCompany(%q).CompanySet and the other Company methods. Nothing sent",
+			ErrInvalidIdentity, groupID, a.companyID, groupID)
 	}
 	return a.companyID, nil
 }

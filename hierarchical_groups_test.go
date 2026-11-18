@@ -758,6 +758,63 @@ func TestHierarchicalGroupProfiles(t *testing.T) {
 		require.Equal(t, "acme", message["$company_id"])
 	})
 
+	companyGroupCalls := func(mp *ApiClient, groupID string) []func() error {
+		return []func() error{
+			func() error { return mp.GroupSet(ctx, "$company_id", groupID, props) },
+			func() error { return mp.GroupSetOnce(ctx, "$company_id", groupID, props) },
+			func() error { return mp.GroupDelete(ctx, "$company_id", groupID) },
+			func() error { return mp.GroupRemoveListProperty(ctx, "$company_id", groupID, props) },
+			func() error {
+				return mp.GroupUnionListProperty(ctx, "$company_id", groupID, map[string]any{"tags": []string{"a"}})
+			},
+			func() error { return mp.GroupDeleteProperty(ctx, "$company_id", groupID, []string{"plan"}) },
+		}
+	}
+
+	t.Run("company group with a different id than the bound company is rejected", func(t *testing.T) {
+		requests := captureRequests(t)
+		for _, call := range companyGroupCalls(mustForCompany(t, hgClient(), "acme"), "globex") {
+			err := call()
+			require.ErrorIs(t, err, ErrInvalidIdentity)
+			require.NotErrorIs(t, err, ErrCompanyRequired)
+			require.Contains(t, err.Error(), "globex")
+			require.Contains(t, err.Error(), "acme")
+			require.Contains(t, err.Error(), "Nothing sent")
+		}
+		require.Empty(t, *requests)
+	})
+
+	t.Run("company group with the bound company id is sent unchanged", func(t *testing.T) {
+		requests := captureRequests(t)
+
+		require.NoError(t, mustForCompany(t, hgClient(), "acme").GroupSet(ctx, "$company_id", "acme", map[string]any{"plan": "pro"}))
+
+		require.Len(t, *requests, 1)
+		require.Equal(t, groupSetUrl, (*requests)[0].url)
+		require.JSONEq(t,
+			`[{"$token":"token","$group_key":"$company_id","$group_id":"acme","$set":{"plan":"pro"},"$company_id":"acme"}]`,
+			string((*requests)[0].body))
+	})
+
+	t.Run("company group on an unbound client is still company required", func(t *testing.T) {
+		requests := captureRequests(t)
+		for _, call := range companyGroupCalls(hgClient(), "globex") {
+			require.ErrorIs(t, call(), ErrCompanyRequired)
+		}
+		require.Empty(t, *requests)
+	})
+
+	t.Run("legacy client bound to a company sends a different company group as before", func(t *testing.T) {
+		requests := captureRequests(t)
+
+		require.NoError(t, mustForCompany(t, legacyClient(), "acme").GroupSet(ctx, "$company_id", "globex", map[string]any{"plan": "pro"}))
+
+		require.Len(t, *requests, 1)
+		require.JSONEq(t,
+			`[{"$token":"token","$group_key":"$company_id","$group_id":"globex","$set":{"plan":"pro"},"$company_id":"acme"}]`,
+			string((*requests)[0].body))
+	})
+
 	companyCalls := []struct {
 		name    string
 		company func(mp *ApiClient) error

@@ -554,6 +554,7 @@ type groupSetPropertyPayload struct {
 // https://developer.mixpanel.com/reference/group-set-property
 //
 // On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
+// A $company_id group whose id differs from the bound company returns ErrInvalidIdentity.
 func (a *ApiClient) GroupSet(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -587,6 +588,7 @@ type groupSetOncePropertyPayload struct {
 // https://developer.mixpanel.com/reference/group-set-property-once
 //
 // On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
+// A $company_id group whose id differs from the bound company returns ErrInvalidIdentity.
 func (a *ApiClient) GroupSetOnce(ctx context.Context, groupKey, groupID string, set map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -620,6 +622,7 @@ type groupDeletePropertyPayload struct {
 // https://developer.mixpanel.com/reference/group-delete-property
 //
 // On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
+// A $company_id group whose id differs from the bound company returns ErrInvalidIdentity.
 func (a *ApiClient) GroupDeleteProperty(ctx context.Context, groupKey, groupID string, unset []string) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -653,6 +656,7 @@ type groupRemoveListPropertyPayload struct {
 // https://developer.mixpanel.com/reference/group-remove-from-list-property
 //
 // On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
+// A $company_id group whose id differs from the bound company returns ErrInvalidIdentity.
 func (a *ApiClient) GroupRemoveListProperty(ctx context.Context, groupKey, groupID string, remove map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -686,6 +690,7 @@ type groupUnionListPropertyPayload struct {
 // https://developer.mixpanel.com/reference/group-union
 //
 // On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
+// A $company_id group whose id differs from the bound company returns ErrInvalidIdentity.
 func (a *ApiClient) GroupUnionListProperty(ctx context.Context, groupKey, groupID string, union map[string]any) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
@@ -719,6 +724,7 @@ type groupDeletePayload struct {
 // https://developer.mixpanel.com/reference/delete-group
 //
 // On a hierarchical groups client this needs a company bound with ForCompany, else it returns ErrCompanyRequired.
+// A $company_id group whose id differs from the bound company returns ErrInvalidIdentity.
 func (a *ApiClient) GroupDelete(ctx context.Context, groupKey, groupID string) error {
 	companyID, err := a.groupCompanyID(groupKey, groupID)
 	if err != nil {
