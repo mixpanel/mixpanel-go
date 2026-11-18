@@ -33,13 +33,14 @@ func NewRemoteFeatureFlagsProvider(token string, version string, config RemoteFl
 	}
 	return &RemoteFeatureFlagsProvider{
 		featureFlagsProvider: featureFlagsProvider{
-			token:            token,
-			apiHost:          config.APIHost,
-			version:          version,
-			evaluationMode:   "remote",
-			tracker:          tracker,
-			client:           client,
-			exposureExecutor: config.ExposureExecutor,
+			token:              token,
+			apiHost:            config.APIHost,
+			version:            version,
+			evaluationMode:     "remote",
+			tracker:            tracker,
+			client:             client,
+			exposureExecutor:   config.ExposureExecutor,
+			hierarchicalGroups: config.HierarchicalGroups,
 		},
 		config: config,
 	}

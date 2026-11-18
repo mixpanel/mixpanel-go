@@ -21,14 +21,28 @@ type featureFlagsProvider struct {
 	tracker          Tracker
 	client           *http.Client
 	exposureExecutor func(send func())
+	// hierarchicalGroups changes how exposure events are attributed; it does not change evaluation.
+	hierarchicalGroups bool
 }
 
 // Manually tracks a feature flag exposure event to Mixpanel.
 func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVariant, flagContext FlagContext, latency *time.Duration) {
-	distinctID, ok := flagContext["distinct_id"].(string)
-	if !ok {
-		log.Printf("Failed to track exposure since distinct_id missing or not a string")
-		return
+	var distinctID string
+	var hierarchicalProps map[string]any
+	if p.hierarchicalGroups {
+		var ok bool
+		distinctID, hierarchicalProps, ok = hierarchicalExposureIdentity(flagContext)
+		if !ok {
+			log.Printf("Failed to track exposure since $company_id missing or empty")
+			return
+		}
+	} else {
+		var ok bool
+		distinctID, ok = flagContext["distinct_id"].(string)
+		if !ok {
+			log.Printf("Failed to track exposure since distinct_id missing or not a string")
+			return
+		}
 	}
 	if p.tracker == nil {
 		log.Printf("Failed to track exposure since tracker is nil")
@@ -40,6 +54,9 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 		"Variant name":         variant.VariantKey,
 		"$experiment_type":     "feature_flag",
 		"Flag evaluation mode": p.evaluationMode,
+	}
+	for k, v := range hierarchicalProps {
+		properties[k] = v
 	}
 
 	if variant.ExperimentID != nil {
@@ -61,6 +78,31 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 		return
 	}
 	send()
+}
+
+// hierarchicalExposureIdentity returns how a hierarchical groups exposure is attributed: the
+// context's distinct_id ("" when it has none) and its $user_id and $company_id. ok is false when
+// the context has neither a $company_id nor a distinct_id, so the event cannot be attributed.
+func hierarchicalExposureIdentity(flagContext FlagContext) (distinctID string, props map[string]any, ok bool) {
+	props = map[string]any{}
+	for _, key := range []string{"$user_id", "$company_id"} {
+		if value, present := contextString(flagContext, key); present {
+			props[key] = value
+		}
+	}
+	distinctID, hasDistinctID := contextString(flagContext, "distinct_id")
+	_, hasCompanyID := props["$company_id"]
+	return distinctID, props, hasCompanyID || hasDistinctID
+}
+
+// contextString returns a context value as a string, and false when it is missing, nil or empty.
+func contextString(flagContext FlagContext, key string) (string, bool) {
+	value, ok := flagContext[key]
+	if !ok || value == nil {
+		return "", false
+	}
+	s := fmt.Sprintf("%v", value)
+	return s, s != ""
 }
 
 // callFlagsEndpoint makes an HTTP GET request to a flags API endpoint.
