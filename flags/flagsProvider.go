@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,10 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 		distinctID, hierarchicalProps, ok = hierarchicalExposureIdentity(flagContext)
 		if !ok {
 			log.Printf("Failed to track exposure since $company_id missing or empty")
+			return
+		}
+		if conflict := combinedDistinctIDConflict(distinctID, hierarchicalProps); conflict != "" {
+			log.Printf("Failed to track exposure since %s; exposure dropped", conflict)
 			return
 		}
 	} else {
@@ -81,12 +86,13 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 }
 
 // hierarchicalExposureIdentity returns how a hierarchical groups exposure is attributed: the
-// context's distinct_id ("" when it has none) and its $user_id and $company_id. ok is false when
-// the context has neither a $company_id nor a distinct_id, so the event cannot be attributed.
+// context's distinct_id ("" when it has none) and its $user_id and $company_id. A $user_id or
+// $company_id that is empty or only whitespace is treated as absent. ok is false when the context
+// has neither a $company_id nor a distinct_id, so the event cannot be attributed.
 func hierarchicalExposureIdentity(flagContext FlagContext) (distinctID string, props map[string]any, ok bool) {
 	props = map[string]any{}
 	for _, key := range []string{"$user_id", "$company_id"} {
-		if value, present := contextString(flagContext, key); present {
+		if value, present := contextString(flagContext, key); present && strings.TrimSpace(value) != "" {
 			props[key] = value
 		}
 	}
@@ -103,6 +109,41 @@ func contextString(flagContext FlagContext, key string) (string, bool) {
 	}
 	s := fmt.Sprintf("%v", value)
 	return s, s != ""
+}
+
+// Parts of a hierarchical groups combined distinct id: combinedCompanyPrefix + company +
+// combinedUserSeparator + user. The same form the mixpanel package parses, which this package
+// cannot import.
+const (
+	combinedCompanyPrefix = "$company:"
+	combinedUserSeparator = "|$user:"
+)
+
+// combinedDistinctIDConflict describes how a distinct id of the form $company:{company}|$user:{user}
+// names a different company or user than the exposure's $company_id or $user_id, or returns ""
+// when they agree, a part is absent, or the distinct id has another form. Ids are compared as
+// strings.
+func combinedDistinctIDConflict(distinctID string, props map[string]any) string {
+	if !strings.HasPrefix(distinctID, combinedCompanyPrefix) {
+		return ""
+	}
+	companyID, userID, found := strings.Cut(strings.TrimPrefix(distinctID, combinedCompanyPrefix), combinedUserSeparator)
+	if !found {
+		return ""
+	}
+	for _, part := range []struct{ name, key, want string }{
+		{"company", "$company_id", companyID},
+		{"user", "$user_id", userID},
+	} {
+		got, present := props[part.key]
+		if !present {
+			continue
+		}
+		if s := fmt.Sprint(got); s != part.want {
+			return fmt.Sprintf("distinct_id %q names %s %q, but %s is %q", distinctID, part.name, part.want, part.key, s)
+		}
+	}
+	return ""
 }
 
 // callFlagsEndpoint makes an HTTP GET request to a flags API endpoint.

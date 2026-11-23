@@ -1,10 +1,13 @@
 package flags
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -821,6 +824,15 @@ func TestLocalFeatureFlagsProvider_ExposureExecutor(t *testing.T) {
 
 // Hierarchical groups
 
+// captureLog redirects the standard logger to a buffer for the rest of the test.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
 const hgTemplate = "$company:{$company_id}|$user:{$user_id}"
 
 type trackedExposure struct {
@@ -1127,6 +1139,70 @@ func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
 			require.Equal(t, "value-a", result)
 		}
 		require.Empty(t, *exposures)
+	})
+
+	t.Run("drops exposure whose combined distinct id conflicts with company or user", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
+		logs := captureLog(t)
+
+		for _, tc := range []struct {
+			flagCtx FlagContext
+			logged  string
+		}{
+			{FlagContext{"distinct_id": "$company:acme|$user:u1", "$company_id": "other", "$user_id": "u1"},
+				`Failed to track exposure since distinct_id "$company:acme|$user:u1" names company "acme", but $company_id is "other"; exposure dropped`},
+			{FlagContext{"distinct_id": "$company:acme|$user:u1", "$company_id": "acme", "$user_id": "u2"},
+				`Failed to track exposure since distinct_id "$company:acme|$user:u1" names user "u1", but $user_id is "u2"; exposure dropped`},
+			{FlagContext{"distinct_id": "$company:acme|$user:u1", "$user_id": "u2"},
+				`names user "u1", but $user_id is "u2"`},
+			{FlagContext{"distinct_id": "$company:42|$user:u1", "$company_id": 43},
+				`names company "42", but $company_id is "43"`},
+		} {
+			logs.Reset()
+			result, err := provider.GetVariantValue(ctx, "flag", "fallback", tc.flagCtx)
+			require.NoError(t, err)
+			require.Equal(t, "value-a", result)
+			require.Contains(t, logs.String(), tc.logged)
+		}
+		require.Empty(t, *exposures)
+	})
+
+	t.Run("combined distinct id matching company and user is tracked", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
+
+		for _, flagCtx := range []FlagContext{
+			{"distinct_id": "$company:42|$user:u1", "$company_id": 42, "$user_id": "u1"},
+			{"distinct_id": "$company:acme|$user:u1", "$company_id": "acme"},
+			{"distinct_id": "$company:acme|$user:u1"},
+		} {
+			_, err := provider.GetVariantValue(ctx, "flag", "fallback", flagCtx)
+			require.NoError(t, err)
+		}
+		require.Len(t, *exposures, 3)
+		require.Equal(t, "$company:42|$user:u1", (*exposures)[0].distinctID)
+		require.Equal(t, "42", (*exposures)[0].props["$company_id"])
+	})
+
+	t.Run("whitespace-only company and user are absent", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "account", ""))
+		logs := captureLog(t)
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"account": "a1", "$company_id": "   ", "$user_id": "u1"})
+		require.NoError(t, err)
+		require.Empty(t, *exposures)
+		require.Contains(t, logs.String(), "Failed to track exposure since $company_id missing or empty")
+
+		_, err = provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"account": "a1", "$company_id": "acme", "$user_id": " \t"})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "acme", (*exposures)[0].props["$company_id"])
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+
+		_, err = provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"account": "a1", "distinct_id": "d1", "$company_id": "  "})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 2)
+		require.Equal(t, "d1", (*exposures)[1].distinctID)
+		require.NotContains(t, (*exposures)[1].props, "$company_id")
 	})
 
 	t.Run("legacy project ignores company and user in context", func(t *testing.T) {
