@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.3.0](https://github.com/mixpanel/mixpanel-go/tree/v2.3.0) (2026-11-23)
+
+### Features
+- tag OpenFeature exposures with $openfeature_provider (SDK-448) ([#108](https://github.com/mixpanel/mixpanel-go/pull/108))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-go/compare/v2.2.0...v2.3.0)
+
 ## [v2.2.0](https://github.com/mixpanel/mixpanel-go/tree/v2.2.0) (2026-09-01)
 
 ### Features
