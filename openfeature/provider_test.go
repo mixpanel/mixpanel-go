@@ -353,6 +353,45 @@ func TestTargetingKeyNotSpecial(t *testing.T) {
 	assert.Equal(t, "actual-user", capturedContext["distinct_id"])
 }
 
+func TestContextIncludesOpenFeatureProviderMarker(t *testing.T) {
+	var capturedContext flags.FlagContext
+	captureMock := &contextCaptureMock{
+		ready:           true,
+		capturedContext: &capturedContext,
+		variant:         flags.SelectedVariant{VariantKey: strPtr("v"), VariantValue: true},
+	}
+	p := mustNewProvider(t, captureMock)
+	ctx := context.Background()
+
+	p.BooleanEvaluation(ctx, "flag", false, of.FlattenedContext{"distinct_id": "user123"})
+	assert.Equal(t, true, capturedContext["$openfeature_provider"])
+	assert.Equal(t, "user123", capturedContext["distinct_id"])
+
+	capturedContext = nil
+	p.BooleanEvaluation(ctx, "flag", false, nil)
+	assert.Equal(t, true, capturedContext["$openfeature_provider"])
+}
+
+func TestOpenFeatureProviderMarkerCannotBeOverridden(t *testing.T) {
+	var capturedContext flags.FlagContext
+	captureMock := &contextCaptureMock{
+		ready:           true,
+		capturedContext: &capturedContext,
+		variant:         flags.SelectedVariant{VariantKey: strPtr("v"), VariantValue: true},
+	}
+	p := mustNewProvider(t, captureMock)
+	ctx := context.Background()
+
+	evalCtx := of.FlattenedContext{
+		"distinct_id":           "user123",
+		"$openfeature_provider": false,
+	}
+
+	p.BooleanEvaluation(ctx, "flag", false, evalCtx)
+
+	assert.Equal(t, true, capturedContext["$openfeature_provider"])
+}
+
 func TestRemoteProviderSkipsReadinessCheck(t *testing.T) {
 	mock := &mockRemoteFlagsProvider{
 		variants: map[string]flags.SelectedVariant{

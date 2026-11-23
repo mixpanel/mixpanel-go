@@ -492,6 +492,59 @@ func TestLocalFeatureFlagsProvider_ExposureTracking(t *testing.T) {
 		require.Equal(t, true, trackedProps["$is_experiment_active"])
 	})
 
+	t.Run("tags exposure only when context carries the OpenFeature provider marker", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+
+		config := DefaultLocalFlagsConfig()
+		config.EnablePolling = false
+
+		var trackedProps map[string]any
+		tracker := func(distinctID string, eventName string, props map[string]any) {
+			trackedProps = props
+		}
+
+		provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
+
+		flags := experimentationFlagsResponse{
+			Flags: []ExperimentationFlag{
+				{
+					ID:      "flag-1",
+					Key:     "test-flag",
+					Context: "distinct_id",
+					Ruleset: RuleSet{
+						Variants: []Variant{{Key: "variant", Value: "test", Split: 1.0}},
+						Rollout:  []Rollout{{RolloutPercentage: 1.0}},
+					},
+				},
+			},
+		}
+
+		httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+			httpmock.NewJsonResponderOrPanic(200, flags))
+
+		ctx := context.Background()
+		err := provider.StartPollingForDefinitions(ctx)
+		require.NoError(t, err)
+
+		variant, err := provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123", "$openfeature_provider": true}, true)
+		require.NoError(t, err)
+		require.Equal(t, "variant", *variant.VariantKey)
+		require.Equal(t, true, trackedProps["$openfeature_provider"])
+
+		trackedProps = nil
+		_, err = provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123"}, true)
+		require.NoError(t, err)
+		require.NotNil(t, trackedProps)
+		require.NotContains(t, trackedProps, "$openfeature_provider")
+
+		trackedProps = nil
+		_, err = provider.GetVariant(ctx, "test-flag", SelectedVariant{}, FlagContext{"distinct_id": "user123", "$openfeature_provider": "true"}, true)
+		require.NoError(t, err)
+		require.NotNil(t, trackedProps)
+		require.NotContains(t, trackedProps, "$openfeature_provider")
+	})
+
 	t.Run("does not track exposure when reportExposure is false", func(t *testing.T) {
 		httpmock.Activate()
 		defer httpmock.DeactivateAndReset()
