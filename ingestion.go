@@ -533,10 +533,16 @@ type peopleDeleteProfilePayload struct {
 // https://developer.mixpanel.com/reference/delete-profile
 //
 // On a hierarchical groups client this deletes the $user_id group profile through /groups, so the
-// distinct id must have the form $company:{company}|$user:{user}, and ignoreAlias is not sent. Any
-// other distinct id returns ErrInvalidIdentity and nothing is sent.
+// distinct id must have the form $company:{company}|$user:{user}. Any other distinct id returns
+// ErrInvalidIdentity, and ignoreAlias true returns ErrUnsupportedHierarchicalOperation, since /groups
+// rejects $ignore_alias; nothing is sent in either case.
 func (a *ApiClient) PeopleDeleteProfile(ctx context.Context, distinctID string, ignoreAlias bool) error {
 	if a.hierarchicalGroups {
+		if ignoreAlias {
+			return fmt.Errorf("%w: $ignore_alias is not supported for hierarchical groups projects, which have no "+
+				"aliases, and /groups rejects it. Call PeopleDeleteProfile with ignoreAlias false. Nothing sent",
+				ErrUnsupportedHierarchicalOperation)
+		}
 		userID, companyID, err := a.hierarchicalProfile(distinctID)
 		if err != nil {
 			return err

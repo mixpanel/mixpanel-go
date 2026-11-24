@@ -353,6 +353,15 @@ func TestIdentityUserProfiles(t *testing.T) {
 		require.Contains(t, err.Error(), "PeopleIncrement and PeopleAppendListProperty")
 	})
 
+	t.Run("delete with ignoreAlias is refused on a hierarchical client", func(t *testing.T) {
+		mp := hgClient()
+		requests := captureRequests(t)
+		err := mp.PeopleDeleteProfile(ctx, "$company:acme|$user:user_123", true)
+		require.ErrorIs(t, err, ErrUnsupportedHierarchicalOperation)
+		require.Contains(t, err.Error(), "$ignore_alias")
+		require.Empty(t, *requests)
+	})
+
 	t.Run("distinct id people methods send a combined distinct id to groups", func(t *testing.T) {
 		mp := hgClient()
 		id := "$company:acme|$user:user_123"
@@ -363,7 +372,7 @@ func TestIdentityUserProfiles(t *testing.T) {
 		}{
 			{groupSetUrl, "$set", func() error { return mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(id, props)}) }},
 			{groupsSetOnceUrl, "$set_once", func() error { return mp.PeopleSetOnce(ctx, []*PeopleProperties{NewPeopleProperties(id, props)}) }},
-			{groupsDeleteGroupUrl, "$delete", func() error { return mp.PeopleDeleteProfile(ctx, id, true) }},
+			{groupsDeleteGroupUrl, "$delete", func() error { return mp.PeopleDeleteProfile(ctx, id, false) }},
 			{groupsRemoveFromListPropertyUrl, "$remove", func() error { return mp.PeopleRemoveListProperty(ctx, id, props) }},
 			{groupsUnionListPropertyUrl, "$union", func() error {
 				return mp.PeopleUnionProperty(ctx, id, map[string]any{"tags": []string{"a"}})
@@ -947,7 +956,8 @@ func TestHierarchicalGroupsLeavesValidMessagesUnchanged(t *testing.T) {
 		require.NoError(t, mp.PeopleUnionProperty(ctx, id, props))
 		require.NoError(t, mp.PeopleRemoveListProperty(ctx, id, props))
 		require.NoError(t, mp.PeopleDeleteProperty(ctx, id, []string{"plan"}))
-		require.NoError(t, mp.PeopleDeleteProfile(ctx, id, true))
+		// $ignore_alias only exists on /engage; a hierarchical groups client refuses it
+		require.NoError(t, mp.PeopleDeleteProfile(ctx, id, !mp.hierarchicalGroups))
 		return *requests
 	}
 
