@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -1424,5 +1425,122 @@ func TestHierarchicalGroupsRefusesWhitespaceIDs(t *testing.T) {
 		require.NoError(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, nil)}))
 		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(id, map[string]any{"plan": "pro"})}))
 		require.Len(t, *requests, 2)
+	})
+}
+
+func TestHierarchicalGroupsRefusesPipeIDs(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("identity with | in the user or company", func(t *testing.T) {
+		for _, identity := range []MixpanelIdentity{
+			{UserID: "user|123", CompanyID: "acme"},
+			{UserID: "user_123", CompanyID: "ac|me"},
+			{CompanyID: "|"},
+			{UserID: "user|123"},
+		} {
+			requests := captureRequests(t)
+			mp := hgClient()
+			_, err := mp.NewIdentityEvent("Signup", identity, nil)
+			require.ErrorIs(t, err, ErrInvalidIdentity, identity.String())
+			require.ErrorContains(t, err, "containing |")
+			require.ErrorIs(t, mp.PeopleSetByIdentity(ctx, identity, map[string]any{"plan": "pro"}), ErrInvalidIdentity, identity.String())
+			require.Empty(t, *requests)
+		}
+	})
+
+	t.Run("a legacy client accepts | in a user id", func(t *testing.T) {
+		event, err := legacyClient().NewIdentityEvent("Signup", MixpanelIdentity{UserID: "user|123"}, nil)
+		require.NoError(t, err)
+		require.Equal(t, "user|123", event.Properties["$user_id"])
+	})
+
+	t.Run("ForCompany with | in the company", func(t *testing.T) {
+		bound, err := hgClient().ForCompany("ac|me")
+		require.ErrorIs(t, err, ErrInvalidIdentity)
+		require.ErrorContains(t, err, "containing |")
+		require.Nil(t, bound)
+
+		_, err = legacyClient().ForCompany("ac|me")
+		require.NoError(t, err)
+	})
+
+	t.Run("combined distinct id with | in a part", func(t *testing.T) {
+		for _, tc := range []struct{ id, part string }{
+			{"$company:ac|me|$user:u", "company"},
+			{"$company:acme|$user:u|1", "user"},
+			{"$company:acme|$user:$company:x|$user:y", "user"},
+		} {
+			requests := captureRequests(t)
+			mp := hgClient()
+			err := mp.Track(ctx, []*Event{mp.NewEvent("Signup", tc.id, nil)})
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			require.ErrorContains(t, err, "has a "+tc.part+" id containing |", tc.id)
+			_, err = mp.Import(ctx, []*Event{mp.NewEvent("Signup", tc.id, nil)}, ImportOptions{})
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			err = mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(tc.id, map[string]any{"plan": "pro"})})
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			require.ErrorContains(t, err, "has a "+tc.part+" id containing |", tc.id)
+			require.ErrorIs(t, mp.PeopleDeleteProfile(ctx, tc.id, false), ErrInvalidIdentity, tc.id)
+			require.ErrorIs(t, mp.PeopleSetByIdentity(ctx, MixpanelIdentity{DistinctID: tc.id}, map[string]any{"plan": "pro"}), ErrInvalidIdentity, tc.id)
+			_, err = mp.NewIdentityEvent("Signup", MixpanelIdentity{DistinctID: tc.id, UserID: "u", CompanyID: "acme"}, nil)
+			require.ErrorIs(t, err, ErrInvalidIdentity, tc.id)
+			require.Empty(t, *requests, tc.id)
+		}
+	})
+
+	t.Run("a legacy client sends a combined distinct id with | in a part unchanged", func(t *testing.T) {
+		requests := captureRequests(t)
+		mp := legacyClient()
+		id := "$company:ac|me|$user:u|1"
+		require.NoError(t, mp.Track(ctx, []*Event{mp.NewEvent("Signup", id, nil)}))
+		require.NoError(t, mp.PeopleSet(ctx, []*PeopleProperties{NewPeopleProperties(id, map[string]any{"plan": "pro"})}))
+		require.Len(t, *requests, 2)
+	})
+}
+
+// captureLog redirects the standard logger for the test and returns what it wrote.
+func captureLog(t *testing.T) *strings.Builder {
+	t.Helper()
+	var out strings.Builder
+	previous := log.Writer()
+	log.SetOutput(&out)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	return &out
+}
+
+func TestDefaultFlagsExposureTrackerLogsRefusedExposure(t *testing.T) {
+	t.Run("hierarchical groups client logs an exposure Track refuses", func(t *testing.T) {
+		requests := captureRequests(t)
+		logged := captureLog(t)
+
+		DefaultFlagsExposureTracker(hgClient())("$company:acme|$user: ", "$experiment_started",
+			map[string]any{"$company_id": "acme"})
+
+		require.Empty(t, *requests)
+		require.Contains(t, logged.String(), "Failed to track exposure since")
+		require.Contains(t, logged.String(), "exposure dropped")
+		require.Contains(t, logged.String(), "only whitespace")
+	})
+
+	t.Run("hierarchical groups client logs nothing for a sent exposure", func(t *testing.T) {
+		requests := captureRequests(t)
+		logged := captureLog(t)
+
+		DefaultFlagsExposureTracker(hgClient())("", "$experiment_started",
+			map[string]any{"$company_id": "acme", "$user_id": "user_123"})
+
+		require.Len(t, *requests, 1)
+		require.Empty(t, logged.String())
+	})
+
+	t.Run("legacy client is unchanged", func(t *testing.T) {
+		httpmock.Activate()
+		t.Cleanup(httpmock.DeactivateAndReset)
+		httpmock.RegisterNoResponder(httpmock.NewStringResponder(http.StatusInternalServerError, "boom"))
+		logged := captureLog(t)
+
+		DefaultFlagsExposureTracker(legacyClient())("user_123", "$experiment_started", map[string]any{})
+
+		require.Empty(t, logged.String())
 	})
 }

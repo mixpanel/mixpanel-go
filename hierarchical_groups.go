@@ -207,7 +207,8 @@ func HierarchicalGroups() Options {
 // bound company for an identity with a UserID but no CompanyID; on a bound client they return
 // ErrInvalidIdentity for a user from another company.
 //
-// It returns ErrInvalidIdentity for an empty company id or one made only of whitespace.
+// It returns ErrInvalidIdentity for an empty company id or one made only of whitespace, and on a
+// hierarchical groups client for a company id containing |.
 func (a *ApiClient) ForCompany(companyID string) (*ApiClient, error) {
 	if companyID == "" {
 		return nil, fmt.Errorf("%w: ForCompany needs a non-empty company id", ErrInvalidIdentity)
@@ -215,6 +216,11 @@ func (a *ApiClient) ForCompany(companyID string) (*ApiClient, error) {
 	if isBlank(companyID) {
 		return nil, fmt.Errorf("%w: ForCompany needs a company id that is not only whitespace, got %q. Nothing sent",
 			ErrInvalidIdentity, companyID)
+	}
+	if a.hierarchicalGroups {
+		if err := requireNoPipe("company", companyID, "ForCompany"); err != nil {
+			return nil, err
+		}
 	}
 	bound := *a
 	bound.companyID = companyID
@@ -435,6 +441,14 @@ func (a *ApiClient) requireIdentityMatchesProject(identity MixpanelIdentity) err
 		return fmt.Errorf("%w: %s requires a hierarchical groups client: mixpanel.NewApiClient(token, mixpanel.HierarchicalGroups())",
 			ErrInvalidIdentity, identity)
 	}
+	if a.hierarchicalGroups {
+		if err := requireNoPipe("user", identity.UserID, identity.String()); err != nil {
+			return err
+		}
+		if err := requireNoPipe("company", identity.CompanyID, identity.String()); err != nil {
+			return err
+		}
+	}
 	return a.requireIdentityDistinctIDAgrees(identity)
 }
 
@@ -578,13 +592,28 @@ func (a *ApiClient) hierarchicalProfile(distinctID string) (userID, companyID st
 }
 
 // requireNonBlankCombined refuses a combined distinct id whose user or company is empty or only
-// whitespace, which Mixpanel would otherwise store as a separate, junk user.
+// whitespace, which Mixpanel would otherwise store as a separate, junk user, or contains |, which
+// makes the combined id ambiguous.
 func requireNonBlankCombined(distinctID, userID, companyID string) error {
 	for _, part := range []struct{ name, id string }{{"company", companyID}, {"user", userID}} {
 		if strings.TrimSpace(part.id) == "" {
 			return fmt.Errorf("%w: distinct_id %q names a %s that is empty or only whitespace. Nothing sent",
 				ErrInvalidIdentity, distinctID, part.name)
 		}
+		if err := requireNoPipe(part.name, part.id, "distinct_id "+strconv.Quote(distinctID)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// requireNoPipe refuses a hierarchical groups user or company id containing |. Mixpanel joins the
+// two into the distinct id $company:{company}|$user:{user}, which such an id makes ambiguous.
+// Callers check this only on hierarchical groups paths.
+func requireNoPipe(name, id, described string) error {
+	if strings.Contains(id, "|") {
+		return fmt.Errorf("%w: %s has a %s id containing |, %q, which hierarchical groups projects do not "+
+			"support in user or company ids. Nothing sent", ErrInvalidIdentity, described, name, id)
 	}
 	return nil
 }

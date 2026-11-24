@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"time"
@@ -208,14 +209,18 @@ func DebugHttpCalls(writer io.Writer) Options {
 // To send asynchronously, wrap with a goroutine in your own TrackerBuilder.
 //
 // On a HierarchicalGroups client an empty distinctID sends no distinct_id; the event is then
-// attributed by the $user_id and $company_id the provider put in props.
+// attributed by the $user_id and $company_id the provider put in props. On such a client an
+// exposure that Track refuses or fails to send is logged and dropped.
 func DefaultFlagsExposureTracker(client *ApiClient) flags.Tracker {
 	return func(distinctID string, eventName string, props map[string]any) {
 		event := client.NewEvent(eventName, distinctID, props)
 		if distinctID == "" && client.hierarchicalGroups {
 			delete(event.Properties, propertyDistinctID)
 		}
-		_ = client.Track(context.Background(), []*Event{event})
+		err := client.Track(context.Background(), []*Event{event})
+		if err != nil && client.hierarchicalGroups {
+			log.Printf("Failed to track exposure since %v; exposure dropped", err)
+		}
 	}
 }
 

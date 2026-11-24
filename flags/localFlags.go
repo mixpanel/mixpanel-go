@@ -200,8 +200,11 @@ func (p *LocalFeatureFlagsProvider) TrackExposureEvent(ctx context.Context, flag
 	p.trackExposure(flagKey, variant, flagContext, nil)
 }
 
-// assignmentKey is the flag's resolved assignment key. Test users are keyed by distinct id, so a
-// distinct_id flag looks them up by that key.
+// assignmentKey is the flag's resolved assignment key. Test users are keyed by distinct id. When
+// the context has non-empty string $user_id and $company_id, every flag looks them up by the
+// combined distinct id $company:{company}|$user:{user}, as the flags service does; otherwise a
+// distinct_id flag looks them up by its assignment key and any other flag by the context's
+// distinct_id.
 func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *ExperimentationFlag, flagContext FlagContext, assignmentKey any) *SelectedVariant {
 	if flag.Ruleset.Test == nil || flag.Ruleset.Test.Users == nil {
 		return nil
@@ -210,6 +213,11 @@ func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *Experime
 	distinctID, ok := flagContext["distinct_id"].(string)
 	if flag.Context == "distinct_id" {
 		distinctID, ok = assignmentKey.(string)
+	}
+	userID, hasUser := nonEmptyContextString(flagContext, "$user_id")
+	companyID, hasCompany := nonEmptyContextString(flagContext, "$company_id")
+	if hasUser && hasCompany {
+		distinctID, ok = combinedCompanyPrefix+companyID+combinedUserSeparator+userID, true
 	}
 	if !ok {
 		return nil
@@ -390,16 +398,23 @@ func resolveAssignmentKey(flag *ExperimentationFlag, flagContext FlagContext) (a
 }
 
 // applyContextValueTemplate replaces each {key} placeholder with the context value of key. Text
-// outside the braces is literal. ok is false when any placeholder key is absent or nil.
+// outside the braces is literal. ok is false when any placeholder's value is not a non-empty
+// string, as the flags service treats it: absent, nil, empty or another type.
 func applyContextValueTemplate(template string, flagContext FlagContext) (string, bool) {
 	ok := true
 	resolved := contextPlaceholder.ReplaceAllStringFunc(template, func(placeholder string) string {
-		value, present := flagContext[placeholder[1:len(placeholder)-1]]
-		if !present || value == nil {
+		value, present := nonEmptyContextString(flagContext, placeholder[1:len(placeholder)-1])
+		if !present {
 			ok = false
 			return ""
 		}
-		return fmt.Sprintf("%v", value)
+		return value
 	})
 	return resolved, ok
+}
+
+// nonEmptyContextString returns the context value of key when it is a non-empty string.
+func nonEmptyContextString(flagContext FlagContext, key string) (string, bool) {
+	value, ok := flagContext[key].(string)
+	return value, ok && value != ""
 }
