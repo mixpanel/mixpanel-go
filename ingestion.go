@@ -395,7 +395,7 @@ type peopleNumericalAddPayload struct {
 //
 // Returns ErrUnsupportedHierarchicalOperation on a hierarchical groups client.
 func (a *ApiClient) PeopleIncrement(ctx context.Context, distinctID string, add map[string]int) error {
-	if err := a.requireGroupOperation("$add"); err != nil {
+	if err := a.refuseHierarchicalOperation("$add"); err != nil {
 		return err
 	}
 	payload := []peopleNumericalAddPayload{
@@ -449,7 +449,7 @@ type peopleAppendListPayload struct {
 //
 // Returns ErrUnsupportedHierarchicalOperation on a hierarchical groups client.
 func (a *ApiClient) PeopleAppendListProperty(ctx context.Context, distinctID string, append map[string]any) error {
-	if err := a.requireGroupOperation("$append"); err != nil {
+	if err := a.refuseHierarchicalOperation("$append"); err != nil {
 		return err
 	}
 	payload := []peopleAppendListPayload{

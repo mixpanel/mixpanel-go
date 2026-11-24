@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mixpanel/mixpanel-go/v2/internal/combinedid"
 )
 
 // The featureFlagsProvider contains common fields and methods shared by providers.
@@ -111,23 +113,12 @@ func contextString(flagContext FlagContext, key string) (string, bool) {
 	return s, s != ""
 }
 
-// Parts of a hierarchical groups combined distinct id: combinedCompanyPrefix + company +
-// combinedUserSeparator + user. The same form the mixpanel package parses, which this package
-// cannot import.
-const (
-	combinedCompanyPrefix = "$company:"
-	combinedUserSeparator = "|$user:"
-)
-
 // combinedDistinctIDConflict describes how a distinct id of the form $company:{company}|$user:{user}
 // names a different company or user than the exposure's $company_id or $user_id, or returns ""
 // when they agree, a part is absent, or the distinct id has another form. Ids are compared as
 // strings.
 func combinedDistinctIDConflict(distinctID string, props map[string]any) string {
-	if !strings.HasPrefix(distinctID, combinedCompanyPrefix) {
-		return ""
-	}
-	companyID, userID, found := strings.Cut(strings.TrimPrefix(distinctID, combinedCompanyPrefix), combinedUserSeparator)
+	companyID, userID, found := combinedid.Parse(distinctID)
 	if !found {
 		return ""
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mixpanel/mixpanel-go/v2/flags"
+	"github.com/mixpanel/mixpanel-go/v2/internal/combinedid"
 )
 
 const (
@@ -18,11 +19,6 @@ const (
 
 	// userIDGroupKey is the group key of a user profile on a hierarchical groups project.
 	userIDGroupKey = "$user_id"
-
-	// The distinct id Mixpanel builds for a hierarchical groups user is
-	// combinedCompanyPrefix + company + combinedUserSeparator + user.
-	combinedCompanyPrefix = "$company:"
-	combinedUserSeparator = "|$user:"
 )
 
 // groupOperations are the profile operations /groups supports. It has no $add, $append or $merge.
@@ -561,14 +557,8 @@ func (a *ApiClient) requireBoundCompany(companyID, described string) error {
 // not have that form. A part that is empty or made only of whitespace is returned as is;
 // requireNonBlankCombined refuses it.
 func parseCombinedDistinctID(distinctID string) (userID, companyID string, ok bool) {
-	if !strings.HasPrefix(distinctID, combinedCompanyPrefix) {
-		return "", "", false
-	}
-	companyID, userID, found := strings.Cut(strings.TrimPrefix(distinctID, combinedCompanyPrefix), combinedUserSeparator)
-	if !found {
-		return "", "", false
-	}
-	return userID, companyID, true
+	companyID, userID, ok = combinedid.Parse(distinctID)
+	return userID, companyID, ok
 }
 
 // hierarchicalProfile returns the user and company of the $user_id group profile that a distinct
@@ -701,17 +691,12 @@ func (a *ApiClient) boundCompanyID(method string) (string, error) {
 	return a.companyID, nil
 }
 
-// requireGroupOperation refuses, on a hierarchical groups client, a people operation that /groups
-// does not support. A hierarchical groups user profile is a group profile, so $add and $append
-// have no valid path at all.
-func (a *ApiClient) requireGroupOperation(operation string) error {
+// refuseHierarchicalOperation refuses, on a hierarchical groups client, a people operation that
+// /groups does not support. A hierarchical groups user profile is a group profile, so $add and
+// $append have no valid path at all.
+func (a *ApiClient) refuseHierarchicalOperation(operation string) error {
 	if !a.hierarchicalGroups {
 		return nil
-	}
-	for _, supported := range groupOperations {
-		if operation == supported {
-			return nil
-		}
 	}
 	return fmt.Errorf("%w: %s is not supported for hierarchical groups projects, whose user profiles are group "+
 		"profiles keyed by $user_id. Supported operations are [%s], so PeopleIncrement and PeopleAppendListProperty "+

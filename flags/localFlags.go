@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/diegoholiveira/jsonlogic/v3"
+	"github.com/mixpanel/mixpanel-go/v2/internal/combinedid"
 )
 
 // LocalFeatureFlagsProvider evaluates feature flags locally using cached definitions
@@ -217,7 +218,7 @@ func (p *LocalFeatureFlagsProvider) getVariantOverrideForTestUser(flag *Experime
 	userID, hasUser := nonEmptyContextString(flagContext, "$user_id")
 	companyID, hasCompany := nonEmptyContextString(flagContext, "$company_id")
 	if hasUser && hasCompany {
-		distinctID, ok = combinedCompanyPrefix+companyID+combinedUserSeparator+userID, true
+		distinctID, ok = combinedid.Build(companyID, userID), true
 	}
 	if !ok {
 		return nil
