@@ -198,6 +198,10 @@ func HierarchicalGroups() Options {
 //	acme.CompanySet(ctx, companyProperties)
 //	acme.GroupSet(ctx, "department", "finance", departmentProperties)
 //
+// ForCompany is meant for writes that carry no identity: the company's own profile and custom
+// group profiles. Send events and user profiles with an Identity whose CompanyID names the
+// company. Track and Import on a bound client don't add the bound company.
+//
 // The copy shares the receiver's http client, credentials, endpoints and feature flag providers;
 // the receiver is unchanged. The ByIdentity people methods use the identity's own company, or the
 // bound company for an identity with a UserID but no CompanyID; on a bound client they return
