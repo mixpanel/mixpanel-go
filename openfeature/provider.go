@@ -212,6 +212,9 @@ func (p *Provider) resolve(ctx context.Context, flagKey string, defaultValue any
 	}
 
 	flagContext := toFlagContext(evalCtx)
+	// SDK-448: tag exposures as coming from this provider. Set after copying
+	// the customer's attributes so they can't override it; older SDKs ignore it.
+	flagContext["$openfeature_provider"] = true
 
 	fallback := flags.SelectedVariant{VariantValue: defaultValue}
 	variant, err := p.flagsProvider.GetVariant(ctx, flagKey, fallback, flagContext, true)
