@@ -546,6 +546,29 @@ func TestRemoteFeatureFlagsProvider_HierarchicalGroups(t *testing.T) {
 		require.Empty(t, *exposures)
 	})
 
+	t.Run("non-string company and user are absent from the exposure", func(t *testing.T) {
+		provider, exposures, _ := setup(t, true)
+		ctx := context.Background()
+
+		_, err := provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "d1", "$user_id": "u1", "$company_id": 42})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "d1", (*exposures)[0].distinctID)
+		require.NotContains(t, (*exposures)[0].props, "$company_id")
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+
+		_, err = provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"distinct_id": "d1", "$user_id": 7, "$company_id": "acme"})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 2)
+		require.Equal(t, "d1", (*exposures)[1].distinctID)
+		require.Equal(t, "acme", (*exposures)[1].props["$company_id"])
+		require.NotContains(t, (*exposures)[1].props, "$user_id")
+
+		_, err = provider.GetVariantValue(ctx, "test-flag", "fallback", FlagContext{"$user_id": "u1", "$company_id": 42})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 2)
+	})
+
 	t.Run("legacy project ignores company and user", func(t *testing.T) {
 		provider, exposures, _ := setup(t, false)
 

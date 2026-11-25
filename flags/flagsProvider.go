@@ -89,18 +89,27 @@ func (p *featureFlagsProvider) trackExposure(flagKey string, variant SelectedVar
 
 // hierarchicalExposureIdentity returns how a hierarchical groups exposure is attributed: the
 // context's distinct_id ("" when it has none) and its $user_id and $company_id. A $user_id or
-// $company_id that is empty or only whitespace is treated as absent. ok is false when the context
-// has neither a $company_id nor a distinct_id, so the event cannot be attributed.
+// $company_id that is not a string, or is empty or only whitespace, is treated as absent, matching
+// how evaluation reads them. A $user_id is attached only alongside a $company_id. ok is false when
+// the context has neither a $company_id nor a distinct_id, so the event cannot be attributed.
 func hierarchicalExposureIdentity(flagContext FlagContext) (distinctID string, props map[string]any, ok bool) {
 	props = map[string]any{}
-	for _, key := range []string{"$user_id", "$company_id"} {
-		if value, present := contextString(flagContext, key); present && strings.TrimSpace(value) != "" {
-			props[key] = value
+	companyID, hasCompanyID := hierarchicalExposureID(flagContext, "$company_id")
+	if hasCompanyID {
+		props["$company_id"] = companyID
+		if userID, hasUserID := hierarchicalExposureID(flagContext, "$user_id"); hasUserID {
+			props["$user_id"] = userID
 		}
 	}
 	distinctID, hasDistinctID := contextString(flagContext, "distinct_id")
-	_, hasCompanyID := props["$company_id"]
 	return distinctID, props, hasCompanyID || hasDistinctID
+}
+
+// hierarchicalExposureID returns the context value of key when it is a string that is not empty
+// or only whitespace.
+func hierarchicalExposureID(flagContext FlagContext, key string) (string, bool) {
+	value, present := nonEmptyContextString(flagContext, key)
+	return value, present && strings.TrimSpace(value) != ""
 }
 
 // contextString returns a context value as a string, and false when it is missing, nil or empty.

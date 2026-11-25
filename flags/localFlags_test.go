@@ -1171,9 +1171,7 @@ func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
 				`Failed to track exposure since distinct_id "$company:acme|$user:u1" names company "acme", but $company_id is "other"; exposure dropped`},
 			{FlagContext{"distinct_id": "$company:acme|$user:u1", "$company_id": "acme", "$user_id": "u2"},
 				`Failed to track exposure since distinct_id "$company:acme|$user:u1" names user "u1", but $user_id is "u2"; exposure dropped`},
-			{FlagContext{"distinct_id": "$company:acme|$user:u1", "$user_id": "u2"},
-				`names user "u1", but $user_id is "u2"`},
-			{FlagContext{"distinct_id": "$company:42|$user:u1", "$company_id": 43},
+			{FlagContext{"distinct_id": "$company:42|$user:u1", "$company_id": "43"},
 				`names company "42", but $company_id is "43"`},
 		} {
 			logs.Reset()
@@ -1189,7 +1187,7 @@ func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
 		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
 
 		for _, flagCtx := range []FlagContext{
-			{"distinct_id": "$company:42|$user:u1", "$company_id": 42, "$user_id": "u1"},
+			{"distinct_id": "$company:42|$user:u1", "$company_id": "42", "$user_id": "u1"},
 			{"distinct_id": "$company:acme|$user:u1", "$company_id": "acme"},
 			{"distinct_id": "$company:acme|$user:u1"},
 		} {
@@ -1199,6 +1197,53 @@ func TestLocalFeatureFlagsProvider_HierarchicalExposure(t *testing.T) {
 		require.Len(t, *exposures, 3)
 		require.Equal(t, "$company:42|$user:u1", (*exposures)[0].distinctID)
 		require.Equal(t, "42", (*exposures)[0].props["$company_id"])
+	})
+
+	t.Run("user without company is not attached or checked", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"distinct_id": "$company:acme|$user:u1", "$user_id": "u2"})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "$company:acme|$user:u1", (*exposures)[0].distinctID)
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+		require.NotContains(t, (*exposures)[0].props, "$company_id")
+	})
+
+	t.Run("non-string company and user are absent", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
+		logs := captureLog(t)
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"distinct_id": "d1", "$user_id": "u1", "$company_id": 42})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "d1", (*exposures)[0].distinctID)
+		require.NotContains(t, (*exposures)[0].props, "$company_id")
+		require.NotContains(t, (*exposures)[0].props, "$user_id")
+
+		_, err = provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"distinct_id": "d1", "$user_id": 7, "$company_id": "acme"})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 2)
+		require.Equal(t, "d1", (*exposures)[1].distinctID)
+		require.Equal(t, "acme", (*exposures)[1].props["$company_id"])
+		require.NotContains(t, (*exposures)[1].props, "$user_id")
+
+		accountProvider, accountExposures := newDefinitionsProvider(t, true, flagDefinition("flag", "account", ""))
+		result, err := accountProvider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"account": "a1", "$user_id": "u1", "$company_id": 42})
+		require.NoError(t, err)
+		require.Equal(t, "value-a", result)
+		require.Empty(t, *accountExposures)
+		require.Contains(t, logs.String(), "Failed to track exposure since $company_id missing or empty")
+	})
+
+	t.Run("numeric company in a combined distinct id is not checked against the context", func(t *testing.T) {
+		provider, exposures := newDefinitionsProvider(t, true, flagDefinition("flag", "distinct_id", ""))
+
+		_, err := provider.GetVariantValue(ctx, "flag", "fallback", FlagContext{"distinct_id": "$company:42|$user:u1", "$company_id": 43})
+		require.NoError(t, err)
+		require.Len(t, *exposures, 1)
+		require.Equal(t, "$company:42|$user:u1", (*exposures)[0].distinctID)
+		require.NotContains(t, (*exposures)[0].props, "$company_id")
 	})
 
 	t.Run("whitespace-only company and user are absent", func(t *testing.T) {
