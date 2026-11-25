@@ -2,6 +2,7 @@ package flags
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -41,6 +42,22 @@ func TestNormalizedHash(t *testing.T) {
 		}
 		require.Greater(t, below50, 300)
 		require.Less(t, below50, 700)
+	})
+}
+
+func TestMixedNormalizedHash(t *testing.T) {
+	t.Run("matches known test vectors", func(t *testing.T) {
+		// Matches FnvHashMixed([]byte("abc")) == 0.37 in the flags Go service.
+		require.Equal(t, 0.37, mixedNormalizedHash("abc", ""))
+	})
+}
+
+func TestAllocationBucket(t *testing.T) {
+	t.Run("matches known test vectors", func(t *testing.T) {
+		// Matches FnvHashMixed([]byte("abc")) == 0.37 in the flags Go service.
+		require.Equal(t, 37, allocationBucket("abc", ""))
+		require.Equal(t, 32, allocationBucket("user123", "checkoutsalt1"))
+		require.Equal(t, 58, allocationBucket("user456", "checkoutsalt1"))
 	})
 }
 
@@ -867,5 +884,225 @@ func TestLocalFeatureFlagsProvider_ExposureExecutor(t *testing.T) {
 		require.Equal(t, 0, trackerCalls)
 		capturedSend()
 		require.Equal(t, 1, trackerCalls)
+	})
+}
+
+// The golden vectors are the cross-SDK contract for multi-experiment flags; the
+// canonical copy lives in the analytics monorepo under
+// go/src/mixpanel.com/flags/api/handlers/testdata/.
+//
+//go:embed testdata/multi_experiment_flag_test_cases.json
+var multiExperimentVectors []byte
+
+const (
+	multiExperimentFlagKey  = "checkout"
+	multiExperimentHashSalt = "salt1"
+	// Allocation buckets for multiExperimentFlagKey with multiExperimentHashSalt.
+	distinctIDInBucket9  = "user23"
+	distinctIDInBucket62 = "user848"
+)
+
+func startProviderWithDefinitions(t *testing.T, definitionsBody []byte, tracker Tracker) *LocalFeatureFlagsProvider {
+	t.Helper()
+	httpmock.Activate()
+	t.Cleanup(httpmock.DeactivateAndReset)
+
+	httpmock.RegisterResponder(http.MethodGet, "https://api.mixpanel.com/flags/definitions",
+		httpmock.NewBytesResponder(200, definitionsBody))
+
+	config := DefaultLocalFlagsConfig()
+	config.EnablePolling = false
+	provider := NewLocalFeatureFlagsProvider("test-token", "test", config, tracker)
+	require.NoError(t, provider.StartPollingForDefinitions(context.Background()))
+	return provider
+}
+
+func getMultiExperimentVariant(t *testing.T, flag ExperimentationFlag, flagContext FlagContext, tracker Tracker) SelectedVariant {
+	t.Helper()
+	definitionsBody, err := json.Marshal(experimentationFlagsResponse{Flags: []ExperimentationFlag{flag}})
+	require.NoError(t, err)
+	provider := startProviderWithDefinitions(t, definitionsBody, tracker)
+
+	variant, err := provider.GetVariant(context.Background(), multiExperimentFlagKey,
+		SelectedVariant{VariantValue: "fallback"}, flagContext, true)
+	require.NoError(t, err)
+	return variant
+}
+
+func experimentEntry(experimentID string, experimentStatus string, allocation ...AllocationRange) Rollout {
+	isExperimentActive := experimentStatus == "active"
+	return Rollout{
+		Type:               rolloutTypeExperiment,
+		ExperimentID:       &experimentID,
+		ExperimentStatus:   experimentStatus,
+		IsExperimentActive: &isExperimentActive,
+		Allocation:         allocation,
+		VariantSplits:      map[string]float64{"control": 0.5, "treatment": 0.5},
+	}
+}
+
+func multiExperimentFlag(rollout ...Rollout) ExperimentationFlag {
+	hashSalt := multiExperimentHashSalt
+	return ExperimentationFlag{
+		ID:        "multi-experiment-1",
+		ProjectID: 31,
+		Name:      "Checkout",
+		Key:       multiExperimentFlagKey,
+		Status:    "enabled",
+		Context:   "distinct_id",
+		HashSalt:  &hashSalt,
+		Ruleset: RuleSet{
+			Variants: []Variant{
+				{Key: "control", Value: "control", IsControl: true},
+				{Key: "treatment", Value: "treatment"},
+			},
+			Rollout: rollout,
+		},
+	}
+}
+
+// withoutEmptyAttribution shapes a variant like the golden vectors, which omit
+// empty experiment fields.
+func withoutEmptyAttribution(variant SelectedVariant) map[string]any {
+	fields := map[string]any{
+		"variant_key":   *variant.VariantKey,
+		"variant_value": variant.VariantValue,
+	}
+	if variant.ExperimentID != nil && *variant.ExperimentID != "" {
+		fields["experiment_id"] = *variant.ExperimentID
+	}
+	if variant.IsExperimentActive != nil && *variant.IsExperimentActive {
+		fields["is_experiment_active"] = true
+	}
+	return fields
+}
+
+func TestLocalFeatureFlagsProvider_MultiExperimentGoldenVectors(t *testing.T) {
+	var vectors struct {
+		Cases []struct {
+			Name     string                    `json:"name"`
+			Context  FlagContext               `json:"context"`
+			Flags    json.RawMessage           `json:"flags"`
+			Expected map[string]map[string]any `json:"expected"`
+		} `json:"TestMultiExperimentFlagEvaluationScenarios"`
+	}
+	require.NoError(t, json.Unmarshal(multiExperimentVectors, &vectors))
+	require.NotEmpty(t, vectors.Cases)
+
+	for _, testCase := range vectors.Cases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			definitionsBody := []byte(`{"flags": ` + string(testCase.Flags) + `}`)
+			provider := startProviderWithDefinitions(t, definitionsBody, nil)
+
+			variants, err := provider.GetAllVariants(context.Background(), testCase.Context)
+			require.NoError(t, err)
+
+			actual := map[string]map[string]any{}
+			for flagKey, variant := range variants {
+				actual[flagKey] = withoutEmptyAttribution(variant)
+			}
+			require.Equal(t, testCase.Expected, actual)
+		})
+	}
+}
+
+func TestLocalFeatureFlagsProvider_MultiExperimentFlag(t *testing.T) {
+	t.Run("skips draft experiment", func(t *testing.T) {
+		flag := multiExperimentFlag(experimentEntry("e_cta", "draft", AllocationRange{Start: 0, End: 40}))
+
+		variant := getMultiExperimentVariant(t, flag, FlagContext{"distinct_id": distinctIDInBucket9}, nil)
+
+		require.Equal(t, "fallback", variant.VariantValue)
+		require.Equal(t, VariantSourceFallback, variant.VariantSource)
+	})
+
+	t.Run("serves fallback when flag has no hash_salt", func(t *testing.T) {
+		flag := multiExperimentFlag(experimentEntry("e_cta", "active", AllocationRange{Start: 0, End: 100}))
+		flag.HashSalt = nil
+
+		variant := getMultiExperimentVariant(t, flag, FlagContext{"distinct_id": distinctIDInBucket9}, nil)
+
+		require.Equal(t, "fallback", variant.VariantValue)
+	})
+
+	t.Run("does not fall through when runtime rule fails", func(t *testing.T) {
+		proOnly := experimentEntry("e_pro_only", "active", AllocationRange{Start: 0, End: 50})
+		proOnly.RuntimeEvaluationRule = map[string]any{"==": []any{map[string]any{"var": "plan"}, "pro"}}
+		flag := multiExperimentFlag(proOnly, experimentEntry("e_everyone", "active", AllocationRange{Start: 50, End: 100}))
+
+		withMatchingPlan := getMultiExperimentVariant(t, flag, FlagContext{
+			"distinct_id":       distinctIDInBucket9,
+			"custom_properties": map[string]any{"plan": "Pro"},
+		}, nil)
+		withOtherPlan := getMultiExperimentVariant(t, flag, FlagContext{
+			"distinct_id":       distinctIDInBucket9,
+			"custom_properties": map[string]any{"plan": "free"},
+		}, nil)
+
+		require.Equal(t, "e_pro_only", *withMatchingPlan.ExperimentID)
+		require.Equal(t, "fallback", withOtherPlan.VariantValue)
+	})
+
+	t.Run("tracks exposure with experiment entry attribution", func(t *testing.T) {
+		var trackedProperties map[string]any
+		tracker := func(_ string, _ string, properties map[string]any) {
+			trackedProperties = properties
+		}
+		flag := multiExperimentFlag(
+			experimentEntry("e_cta", "active", AllocationRange{Start: 0, End: 40}),
+			experimentEntry("e_search", "concluded", AllocationRange{Start: 40, End: 65}),
+		)
+		flagLevelExperimentID := "flag-level-experiment"
+		flagLevelIsExperimentActive := true
+		flag.ExperimentID = &flagLevelExperimentID
+		flag.IsExperimentActive = &flagLevelIsExperimentActive
+
+		getMultiExperimentVariant(t, flag, FlagContext{"distinct_id": distinctIDInBucket62}, tracker)
+
+		require.Equal(t, "e_search", trackedProperties["$experiment_id"])
+		require.Equal(t, false, trackedProperties["$is_experiment_active"])
+	})
+
+	t.Run("treats omitted is_experiment_active on an experiment entry as inactive", func(t *testing.T) {
+		var trackedProperties map[string]any
+		tracker := func(_ string, _ string, properties map[string]any) {
+			trackedProperties = properties
+		}
+		entry := experimentEntry("e_cta", "active", AllocationRange{Start: 0, End: 100})
+		entry.IsExperimentActive = nil
+		flagLevelIsExperimentActive := true
+		flag := multiExperimentFlag(entry)
+		flag.IsExperimentActive = &flagLevelIsExperimentActive
+
+		variant := getMultiExperimentVariant(t, flag, FlagContext{"distinct_id": distinctIDInBucket9}, tracker)
+
+		require.False(t, *variant.IsExperimentActive)
+		require.Equal(t, false, trackedProperties["$is_experiment_active"])
+	})
+
+	t.Run("variant_override uses experiment entry attribution", func(t *testing.T) {
+		shipped := experimentEntry("e_shipped", "concluded", AllocationRange{Start: 0, End: 100})
+		shipped.VariantOverride = &VariantOverride{Key: "treatment"}
+		flag := multiExperimentFlag(shipped)
+
+		variant := getMultiExperimentVariant(t, flag, FlagContext{"distinct_id": distinctIDInBucket9}, nil)
+
+		require.Equal(t, "treatment", *variant.VariantKey)
+		require.Equal(t, "e_shipped", *variant.ExperimentID)
+		require.False(t, *variant.IsExperimentActive)
+	})
+
+	t.Run("variant depends on experiment_id", func(t *testing.T) {
+		// Same subject, flag, salt and allocation: only the experiment_id differs,
+		// and it is part of the variant hash input.
+		flagContext := FlagContext{"distinct_id": "user-1"}
+
+		firstExperimentVariant := getMultiExperimentVariant(t,
+			multiExperimentFlag(experimentEntry("e_cta", "active", AllocationRange{Start: 0, End: 100})), flagContext, nil)
+		secondExperimentVariant := getMultiExperimentVariant(t,
+			multiExperimentFlag(experimentEntry("e_next", "active", AllocationRange{Start: 0, End: 100})), flagContext, nil)
+
+		require.Equal(t, "treatment", *firstExperimentVariant.VariantKey)
+		require.Equal(t, "control", *secondExperimentVariant.VariantKey)
 	})
 }

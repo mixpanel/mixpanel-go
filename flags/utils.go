@@ -31,6 +31,33 @@ func normalizedHash(key, salt string) float64 {
 	return float64(hashValue%100) / 100.0
 }
 
+// allocationBucket computes the allocation bucket, 0 to 99, for a
+// multi-experiment flag. It uses the same mixed hash as mixedNormalizedHash, so
+// every bucket bit depends on every input byte.
+func allocationBucket(key, salt string) int {
+	hashValue := fmix64(fnv1a64([]byte(key + salt)))
+	return int(hashValue % 100)
+}
+
+// mixedNormalizedHash computes a hash value between 0.0 and 1.0 (exclusive) by
+// passing FNV-1a through the MurmurHash3 64-bit finalizer, so every output bit
+// depends on every input byte. Used for variant assignment on the experiment
+// entries of a multi-experiment flag.
+func mixedNormalizedHash(key, salt string) float64 {
+	hashValue := fmix64(fnv1a64([]byte(key + salt)))
+	return float64(hashValue%100) / 100.0
+}
+
+// fmix64 is the MurmurHash3 64-bit finalizer.
+func fmix64(value uint64) uint64 {
+	value ^= value >> 33
+	value *= 0xff51afd7ed558ccd
+	value ^= value >> 33
+	value *= 0xc4ceb9fe1a85ec53
+	value ^= value >> 33
+	return value
+}
+
 // generateTraceparent generates a W3C traceparent header for distributed tracing
 // Format: 00-{trace-id}-{parent-id}-{trace-flags}
 func generateTraceparent() (string, error) {
