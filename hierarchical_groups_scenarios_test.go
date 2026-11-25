@@ -19,8 +19,7 @@ const (
 )
 
 var (
-	scenarioUser          = MixpanelIdentity{UserID: scenarioUserID, CompanyID: scenarioCompanyID}
-	scenarioUserAndDevice = MixpanelIdentity{UserID: scenarioUserID, CompanyID: scenarioCompanyID, DeviceID: scenarioDeviceID}
+	scenarioUser = MixpanelIdentity{UserID: scenarioUserID, CompanyID: scenarioCompanyID}
 )
 
 // eventKeys are the properties every event built by NewIdentityEvent carries besides its identity.
@@ -85,21 +84,10 @@ func requireGroupProfileUpdate(t *testing.T, requests []capturedRequest, wantURL
 
 // Events
 
-func TestScenarioTrackAnonymous(t *testing.T) {
-	requests := captureRequests(t)
-
-	trackIdentity(t, hgClient(), MixpanelIdentity{DeviceID: scenarioDeviceID}, nil)
-
-	u, props := onlyEvent(t, *requests)
-	require.Equal(t, trackURL, u)
-	requireKeys(t, props, append(eventKeys, "$device_id")...)
-	require.Equal(t, scenarioDeviceID, props["$device_id"])
-}
-
 func TestScenarioTrackIdentified(t *testing.T) {
 	requests := captureRequests(t)
 
-	trackIdentity(t, hgClient(), scenarioUserAndDevice, nil)
+	trackIdentity(t, hgClient(), scenarioUser, map[string]any{"$device_id": scenarioDeviceID})
 
 	u, props := onlyEvent(t, *requests)
 	require.Equal(t, trackURL, u)
@@ -136,17 +124,16 @@ func TestScenarioImportIdentified(t *testing.T) {
 	requests := captureRequests(t)
 	mp := hgClient()
 
-	event, err := mp.NewIdentityEvent("Scenario Event", scenarioUserAndDevice, nil)
+	event, err := mp.NewIdentityEvent("Scenario Event", scenarioUser, nil)
 	require.NoError(t, err)
 	_, err = mp.Import(context.Background(), []*Event{event}, ImportOptions{Strict: true})
 	require.NoError(t, err)
 
 	u, props := onlyEvent(t, *requests)
 	require.Equal(t, importURL, u)
-	requireKeys(t, props, append(eventKeys, "$user_id", "$company_id", "$device_id")...)
+	requireKeys(t, props, append(eventKeys, "$user_id", "$company_id")...)
 	require.Equal(t, scenarioUserID, props["$user_id"])
 	require.Equal(t, scenarioCompanyID, props["$company_id"])
-	require.Equal(t, scenarioDeviceID, props["$device_id"])
 }
 
 func TestScenarioIdentityOverridesProperties(t *testing.T) {

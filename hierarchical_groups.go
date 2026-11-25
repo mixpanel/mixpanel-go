@@ -15,7 +15,6 @@ import (
 const (
 	propertyUserID    = "$user_id"
 	propertyCompanyID = "$company_id"
-	propertyDeviceID  = "$device_id"
 
 	// userIDGroupKey is the group key of a user profile on a hierarchical groups project.
 	userIDGroupKey = "$user_id"
@@ -42,8 +41,8 @@ var (
 
 // MixpanelIdentity identifies who an event or profile update belongs to.
 //
-// Mixpanel resolves an identity from whichever of distinct_id, $user_id, $company_id and
-// $device_id an event carries, so any combination may be set. An empty string leaves a value
+// Mixpanel resolves an identity from whichever of distinct_id, $user_id and $company_id an event
+// carries, so any combination may be set. An empty string leaves a value
 // unset, and unset values are never sent. At least one value is required, and a UserID or
 // CompanyID made only of whitespace is refused; both are checked when the identity is used and
 // return ErrInvalidIdentity.
@@ -52,11 +51,9 @@ var (
 // UserID was left empty by mistake) is sent as a company-only identity, with no user. If that is
 // not intended, check for empty ids before building one.
 //
-//	mixpanel.MixpanelIdentity{DistinctID: "user_123"}                     // a plain distinct id
-//	mixpanel.MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"} // simplified id merge
-//	mixpanel.MixpanelIdentity{UserID: "user_123", CompanyID: "acme"}      // hierarchical groups
-//	mixpanel.MixpanelIdentity{DeviceID: "device_abc"}                     // anonymous, no user yet
-//	mixpanel.MixpanelIdentity{CompanyID: "acme"}                          // a company, no user
+//	mixpanel.MixpanelIdentity{DistinctID: "user_123"}                // a plain distinct id
+//	mixpanel.MixpanelIdentity{UserID: "user_123", CompanyID: "acme"} // hierarchical groups
+//	mixpanel.MixpanelIdentity{CompanyID: "acme"}                     // a company, no user
 //
 // Which combinations are valid depends on the project, so the client rather than this type decides.
 // On a hierarchical groups project the company is part of the user's identity: a UserID sent
@@ -77,9 +74,6 @@ type MixpanelIdentity struct {
 	UserID string
 	// CompanyID is the id of the top-level company, on a hierarchical groups project.
 	CompanyID string
-	// DeviceID is the client's device id. Events carrying one are attributed to the device until a
-	// later event names the user, at which point that earlier activity follows the user.
-	DeviceID string
 }
 
 // IsHierarchical reports whether the identity names a company, which is what sends it down
@@ -89,7 +83,7 @@ func (i MixpanelIdentity) IsHierarchical() bool {
 }
 
 func (i MixpanelIdentity) isEmpty() bool {
-	return i.DistinctID == "" && i.UserID == "" && i.CompanyID == "" && i.DeviceID == ""
+	return i.DistinctID == "" && i.UserID == "" && i.CompanyID == ""
 }
 
 // String lists the identity's set values, for error messages.
@@ -99,7 +93,6 @@ func (i MixpanelIdentity) String() string {
 		{"DistinctID", i.DistinctID},
 		{"UserID", i.UserID},
 		{"CompanyID", i.CompanyID},
-		{"DeviceID", i.DeviceID},
 	} {
 		if f.value != "" {
 			parts = append(parts, f.name+"="+f.value)
@@ -123,7 +116,6 @@ func (i MixpanelIdentity) FlagContext(groups, customProperties map[string]any) f
 		{"distinct_id", i.DistinctID},
 		{propertyUserID, i.UserID},
 		{propertyCompanyID, i.CompanyID},
-		{"device_id", i.DeviceID},
 	} {
 		if f.value != "" {
 			fc[f.key] = f.value
@@ -145,7 +137,6 @@ func (i MixpanelIdentity) applyTo(properties map[string]any) {
 	setIfPresent(properties, propertyDistinctID, i.DistinctID)
 	setIfPresent(properties, propertyUserID, i.UserID)
 	setIfPresent(properties, propertyCompanyID, i.CompanyID)
-	setIfPresent(properties, propertyDeviceID, i.DeviceID)
 }
 
 func setIfPresent(properties map[string]any, key, value string) {
@@ -431,7 +422,7 @@ func (a *ApiClient) PeopleDeleteProfileByIdentity(ctx context.Context, identity 
 // mismatch would be silently mis-attributed.
 func (a *ApiClient) requireIdentityMatchesProject(identity MixpanelIdentity) error {
 	if identity.isEmpty() {
-		return fmt.Errorf("%w: an identity needs at least one of DistinctID, UserID, CompanyID or DeviceID", ErrInvalidIdentity)
+		return fmt.Errorf("%w: an identity needs at least one of DistinctID, UserID or CompanyID", ErrInvalidIdentity)
 	}
 	if isBlank(identity.UserID) || isBlank(identity.CompanyID) {
 		return fmt.Errorf("%w: %s has a UserID or CompanyID that is only whitespace (UserID %q, CompanyID %q). "+
@@ -522,10 +513,6 @@ func (a *ApiClient) resolveProfile(identity MixpanelIdentity) (userID, companyID
 			"by distinct id unless the project uses hierarchical groups; set DistinctID", ErrInvalidIdentity, identity)
 	}
 	if identity.UserID == "" {
-		if identity.CompanyID == "" {
-			return "", "", fmt.Errorf("%w: %s names no user, so it cannot identify a profile. "+
-				"Device ids identify anonymous events, not profiles", ErrInvalidIdentity, identity)
-		}
 		return "", "", fmt.Errorf("%w: user profile updates require a UserID, and %s has none. "+
 			"Use CompanySet(ctx, properties) on ForCompany(companyID) to update the company's profile",
 			ErrInvalidIdentity, identity)

@@ -81,12 +81,11 @@ var hgUser = MixpanelIdentity{UserID: "user_123", CompanyID: "acme"}
 
 func TestIdentityFlagContext(t *testing.T) {
 	t.Run("hierarchical identity", func(t *testing.T) {
-		identity := MixpanelIdentity{UserID: "user_123", CompanyID: "acme", DeviceID: "device_abc"}
+		identity := MixpanelIdentity{UserID: "user_123", CompanyID: "acme"}
 
 		require.Equal(t, flags.FlagContext{
 			"$user_id":          "user_123",
 			"$company_id":       "acme",
-			"device_id":         "device_abc",
 			"department":        "finance",
 			"custom_properties": map[string]any{"plan": "enterprise"},
 		}, identity.FlagContext(
@@ -117,12 +116,13 @@ func TestIdentityEvents(t *testing.T) {
 		require.Equal(t, version, event.Properties[propertyLibVersion])
 	})
 
-	t.Run("hierarchical event with device id", func(t *testing.T) {
-		event, err := hgClient().NewIdentityEvent("Signup",
-			MixpanelIdentity{UserID: "user_123", CompanyID: "acme", DeviceID: "device_abc"}, nil)
+	t.Run("hierarchical event passes a $device_id property through", func(t *testing.T) {
+		event, err := hgClient().NewIdentityEvent("Signup", hgUser, map[string]any{"$device_id": "device_abc"})
 		require.NoError(t, err)
 
 		require.Equal(t, "device_abc", event.Properties["$device_id"])
+		require.Equal(t, "user_123", event.Properties["$user_id"])
+		require.Equal(t, "acme", event.Properties["$company_id"])
 		require.NotContains(t, event.Properties, "distinct_id")
 	})
 
@@ -224,28 +224,26 @@ func TestIdentityEvents(t *testing.T) {
 	})
 
 	t.Run("empty string leaves a value unset", func(t *testing.T) {
-		identity := MixpanelIdentity{UserID: "user_123", DeviceID: ""}
+		identity := MixpanelIdentity{UserID: "user_123", CompanyID: ""}
 		require.Equal(t, "MixpanelIdentity{UserID=user_123}", identity.String())
 
 		event, err := legacyClient().NewIdentityEvent("Signup", identity, nil)
 		require.NoError(t, err)
-		require.NotContains(t, event.Properties, "$device_id")
+		require.NotContains(t, event.Properties, "$company_id")
 	})
 
 	t.Run("string lists set values", func(t *testing.T) {
-		identity := MixpanelIdentity{DistinctID: "d", UserID: "u", CompanyID: "c", DeviceID: "v"}
-		require.Equal(t, "MixpanelIdentity{DistinctID=d, UserID=u, CompanyID=c, DeviceID=v}", identity.String())
+		identity := MixpanelIdentity{DistinctID: "d", UserID: "u", CompanyID: "c"}
+		require.Equal(t, "MixpanelIdentity{DistinctID=d, UserID=u, CompanyID=c}", identity.String())
 		require.True(t, identity.IsHierarchical())
 		require.False(t, MixpanelIdentity{UserID: "u"}.IsHierarchical())
 	})
 
-	t.Run("user and device without company is valid for simplified id merge", func(t *testing.T) {
-		event, err := legacyClient().NewIdentityEvent("Signup",
-			MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, nil)
+	t.Run("user without company is sent as given without hierarchical groups", func(t *testing.T) {
+		event, err := legacyClient().NewIdentityEvent("Signup", MixpanelIdentity{UserID: "user_123"}, nil)
 		require.NoError(t, err)
 
 		require.Equal(t, "user_123", event.Properties["$user_id"])
-		require.Equal(t, "device_abc", event.Properties["$device_id"])
 		require.NotContains(t, event.Properties, "distinct_id")
 		require.NotContains(t, event.Properties, "$company_id")
 	})
@@ -256,29 +254,6 @@ func TestIdentityEvents(t *testing.T) {
 
 		require.Equal(t, "user_123", event.Properties["$user_id"])
 		require.NotContains(t, event.Properties, "$company_id")
-	})
-
-	t.Run("user with device but no company is allowed for hierarchical groups", func(t *testing.T) {
-		// Mixpanel ignores the user id and keeps the event under the device, which later links to
-		// the company-scoped user. Recoverable, so the library does not refuse it.
-		event, err := hgClient().NewIdentityEvent("Signup",
-			MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, nil)
-		require.NoError(t, err)
-
-		require.Equal(t, "device_abc", event.Properties["$device_id"])
-		require.NotContains(t, event.Properties, "$company_id")
-	})
-
-	t.Run("anonymous device event works in both modes", func(t *testing.T) {
-		for _, mp := range []*ApiClient{hgClient(), legacyClient()} {
-			event, err := mp.NewIdentityEvent("Page View", MixpanelIdentity{DeviceID: "device_abc"}, nil)
-			require.NoError(t, err)
-
-			require.Equal(t, "device_abc", event.Properties["$device_id"])
-			require.NotContains(t, event.Properties, "distinct_id")
-			require.NotContains(t, event.Properties, "$user_id")
-			require.NotContains(t, event.Properties, "$company_id")
-		}
 	})
 
 	t.Run("combined distinct id event passes through", func(t *testing.T) {
@@ -324,15 +299,6 @@ func TestIdentityEvents(t *testing.T) {
 func TestIdentityUserProfiles(t *testing.T) {
 	ctx := context.Background()
 	props := map[string]any{"plan": "pro"}
-
-	t.Run("device identity cannot identify a profile", func(t *testing.T) {
-		requests := captureRequests(t)
-		for _, mp := range []*ApiClient{hgClient(), legacyClient()} {
-			err := mp.PeopleSetByIdentity(ctx, MixpanelIdentity{DeviceID: "device_abc"}, props)
-			require.ErrorIs(t, err, ErrInvalidIdentity)
-		}
-		require.Empty(t, *requests)
-	})
 
 	t.Run("increment and append are refused for hierarchical groups", func(t *testing.T) {
 		requests := captureRequests(t)
@@ -591,17 +557,6 @@ func TestIdentityUserProfiles(t *testing.T) {
 		}
 	})
 
-	t.Run("ForCompany uses the bound company for a user and device identity", func(t *testing.T) {
-		requests := captureRequests(t)
-		acme := mustForCompany(t, hgClient(), "acme")
-
-		require.NoError(t, acme.PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, props))
-
-		_, message := onlyMessage(t, *requests)
-		require.Equal(t, "acme", message["$company_id"])
-		require.Equal(t, "user_123", message["$group_id"])
-	})
-
 	t.Run("legacy distinct id identity uses engage", func(t *testing.T) {
 		requests := captureRequests(t)
 
@@ -651,7 +606,7 @@ func TestIdentityUserProfiles(t *testing.T) {
 	})
 
 	t.Run("legacy client cannot address a profile without distinct id", func(t *testing.T) {
-		err := legacyClient().PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, props)
+		err := legacyClient().PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123"}, props)
 
 		require.ErrorIs(t, err, ErrInvalidIdentity)
 		require.Contains(t, err.Error(), "distinct id")
@@ -660,8 +615,8 @@ func TestIdentityUserProfiles(t *testing.T) {
 	t.Run("hierarchical user without company is company required", func(t *testing.T) {
 		requests := captureRequests(t)
 
-		// Valid for events (the device id rescues it) but a profile needs the company.
-		err := hgClient().PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123", DeviceID: "device_abc"}, props)
+		// Valid for events but a profile needs the company.
+		err := hgClient().PeopleSetByIdentity(ctx, MixpanelIdentity{UserID: "user_123"}, props)
 
 		require.ErrorIs(t, err, ErrCompanyRequired)
 		require.Empty(t, *requests)
