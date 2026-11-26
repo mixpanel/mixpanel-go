@@ -52,6 +52,29 @@ func (m *ApiClient) Track(ctx context.Context, events []*Event) error {
 		return fmt.Errorf("max track events is %d", MaxTrackEvents)
 	}
 
+	if m.botClassifier != nil {
+		for _, event := range events {
+			if event.Properties == nil {
+				continue
+			}
+			ua, ok := event.Properties["$user_agent"]
+			if !ok {
+				continue
+			}
+			uaStr, ok := ua.(string)
+			if !ok {
+				continue
+			}
+			classification := m.botClassifier.Classify(uaStr)
+			event.Properties["$is_ai_bot"] = classification.IsAIBot
+			if classification.IsAIBot {
+				event.Properties["$ai_bot_name"] = classification.BotName
+				event.Properties["$ai_bot_provider"] = classification.Provider
+				event.Properties["$ai_bot_category"] = classification.Category
+			}
+		}
+	}
+
 	query := url.Values{}
 	query.Add("verbose", "1")
 
