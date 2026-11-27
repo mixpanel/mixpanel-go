@@ -453,6 +453,7 @@ func TestImport(t *testing.T) {
 				"error": "some data points in the request failed validation",
 				"failed_records": [
 					"properties, missing or empty",
+					null,
 					{
 						"index": 1,
 						"$insert_id": "some-insert-id",
@@ -469,6 +470,7 @@ func TestImport(t *testing.T) {
 		require.ErrorAs(t, err, validationError)
 		require.Equal(t, []ImportFailedRecords{
 			{Index: -1, Message: "properties, missing or empty"},
+			{Index: -1},
 			{Index: 1, InsertID: "some-insert-id", Field: "time", Message: "data past retention period of 5 days"},
 		}, validationError.FailedImportRecords)
 	})
