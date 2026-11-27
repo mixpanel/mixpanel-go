@@ -440,6 +440,41 @@ func TestImport(t *testing.T) {
 		require.Equal(t, "event", validationError.FailedImportRecords[0].Field)
 	})
 
+	t.Run("bad request with string and $insert_id failed records", func(t *testing.T) {
+		ctx := context.Background()
+		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))
+		setupHttpEndpointTest(t, mp, getValues(117, ImportOptionsRecommend.Strict), func(r []*Event) {}, &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Body: io.NopCloser(strings.NewReader(`
+			{
+				"code": 400,
+				"status": "Bad Request",
+				"num_records_imported": 0,
+				"error": "some data points in the request failed validation",
+				"failed_records": [
+					"properties, missing or empty",
+					null,
+					{
+						"index": 1,
+						"$insert_id": "some-insert-id",
+						"field": "time",
+						"message": "data past retention period of 5 days"
+					}
+				]
+			}
+			`)),
+		})
+
+		_, err := mp.Import(ctx, []*Event{mp.NewEvent("import-event", EmptyDistinctID, map[string]any{})}, ImportOptionsRecommend)
+		validationError := &ImportFailedValidationError{}
+		require.ErrorAs(t, err, validationError)
+		require.Equal(t, []ImportFailedRecords{
+			{Index: -1, Message: "properties, missing or empty"},
+			{Index: -1},
+			{Index: 1, InsertID: "some-insert-id", Field: "time", Message: "data past retention period of 5 days"},
+		}, validationError.FailedImportRecords)
+	})
+
 	t.Run("rate limit exceeded", func(t *testing.T) {
 		ctx := context.Background()
 		mp := NewApiClient("token", ServiceAccount(117, "user-name", "secret"))

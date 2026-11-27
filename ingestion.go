@@ -83,11 +83,38 @@ type ImportFailedValidationError struct {
 	FailedImportRecords []ImportFailedRecords `json:"failed_records"`
 }
 
+// ImportFailedRecords is one entry of failed_records in an /import 400 response.
+// The API returns most entries as objects, but some validation errors come back
+// as a plain message string; for those only Message is set and Index is -1.
 type ImportFailedRecords struct {
 	Index    int    `json:"index"`
 	InsertID string `json:"insert_id"`
 	Field    string `json:"field"`
 	Message  string `json:"message"`
+}
+
+// UnmarshalJSON accepts both entry shapes, and reads the insert id from the
+// "$insert_id" key the API sends as well as the documented "insert_id".
+func (r *ImportFailedRecords) UnmarshalJSON(data []byte) error {
+	var message string
+	if err := json.Unmarshal(data, &message); err == nil {
+		*r = ImportFailedRecords{Index: -1, Message: message}
+		return nil
+	}
+
+	type record ImportFailedRecords
+	var raw struct {
+		record
+		DollarInsertID string `json:"$insert_id"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*r = ImportFailedRecords(raw.record)
+	if r.InsertID == "" {
+		r.InsertID = raw.DollarInsertID
+	}
+	return nil
 }
 
 func (e ImportFailedValidationError) Error() string {
