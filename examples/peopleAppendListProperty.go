@@ -33,7 +33,7 @@ func PeopleAppendListProperty() error {
 
 	// we have a list of vehicles, lets add a new one
 	if err := mp.PeopleAppendListProperty(ctx, "Spartan-117", map[string]any{
-		"vehicles": 1,
+		"vehicles": "puma",
 	}); err != nil {
 		return err
 	}
